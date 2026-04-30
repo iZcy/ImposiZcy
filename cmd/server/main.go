@@ -201,30 +201,24 @@ func main() {
 			dashboard.GET("/ws", wsHandler.HandleConnection)
 		}
 
-		isDev := gin.Mode() == gin.DebugMode
+	}
+
+	isDev := gin.Mode() == gin.DebugMode
+	if isDev {
 		viteHost := os.Getenv("VITE_HOST")
 		if viteHost == "" {
 			viteHost = "localhost"
 		}
 		viteDevServerURL, _ := url.Parse("http://" + viteHost + ":5176")
-
-		if isDev {
-			viteProxy := httputil.NewSingleHostReverseProxy(viteDevServerURL)
-			router.NoRoute(func(c *gin.Context) {
-				if len(c.Request.URL.Path) >= 10 && c.Request.URL.Path[:10] == "/dashboard" {
-					c.Request.URL.Path = c.Request.URL.Path[10:]
-					if c.Request.URL.Path == "" {
-						c.Request.URL.Path = "/"
-					}
-				}
-				viteProxy.ServeHTTP(c.Writer, c.Request)
-			})
-		} else {
-			spa := kzcydash.SPAHandler("./public/dist", []string{"/dashboard"})
-			router.NoRoute(func(c *gin.Context) {
-				spa.ServeHTTP(c.Writer, c.Request)
-			})
-		}
+		viteProxy := httputil.NewSingleHostReverseProxy(viteDevServerURL)
+		router.NoRoute(func(c *gin.Context) {
+			viteProxy.ServeHTTP(c.Writer, c.Request)
+		})
+	} else {
+		spa := kzcydash.SPAHandler("./public/dist", []string{"/", "/dashboard"})
+		router.NoRoute(func(c *gin.Context) {
+			spa.ServeHTTP(c.Writer, c.Request)
+		})
 	}
 
 	srv := &http.Server{

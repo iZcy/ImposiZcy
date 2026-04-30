@@ -116,7 +116,7 @@ func (h *RenderHandler) Render(c *gin.Context) {
 		outputFormat = string(template.OutputFormat)
 	}
 	if outputFormat == "" {
-		outputFormat = string(models.OutputFormatPNG)
+		outputFormat = string(models.RenderFormatPNG)
 	}
 
 	width := int(template.Width)
@@ -149,7 +149,7 @@ func (h *RenderHandler) Render(c *gin.Context) {
 	imageOutput := &models.ImageOutput{
 		TemplateID:   template.ID.Hex(),
 		TemplateSlug: template.Slug,
-		Format:       models.OutputFormat(outputFormat),
+		Format:       models.RenderOutputFormat(outputFormat),
 		Width:        width,
 		Height:       height,
 		DPI:          template.DPI,
@@ -190,7 +190,7 @@ func (h *RenderHandler) Render(c *gin.Context) {
 
 	contentType := "image/png"
 	fileExt := ".png"
-	if outputFormat == string(models.OutputFormatJPEG) {
+	if outputFormat == string(models.RenderFormatJPEG) {
 		contentType = "image/jpeg"
 		fileExt = ".jpg"
 	}
@@ -234,14 +234,14 @@ func (h *RenderHandler) RenderAsync(c *gin.Context) {
 		outputFormat = string(template.OutputFormat)
 	}
 	if outputFormat == "" {
-		outputFormat = string(models.OutputFormatPNG)
+		outputFormat = string(models.RenderFormatPNG)
 	}
 
 	job := &models.RenderJob{
 		TemplateID:   template.ID,
 		TemplateSlug: template.Slug,
 		Data:         req.Data,
-		OutputFormat: models.OutputFormat(outputFormat),
+		OutputFormat: models.RenderOutputFormat(outputFormat),
 		Width:        int(template.Width),
 		Height:       int(template.Height),
 		Status:       models.RenderStatusPending,
@@ -317,7 +317,7 @@ func (h *RenderHandler) processJobAsync(job *models.RenderJob, template *models.
 	imageOutput := &models.ImageOutput{
 		TemplateID:   template.ID.Hex(),
 		TemplateSlug: template.Slug,
-		Format:       models.OutputFormat(job.OutputFormat),
+		Format:       models.RenderOutputFormat(job.OutputFormat),
 		Width:        job.Width,
 		Height:       job.Height,
 		DPI:          template.DPI,

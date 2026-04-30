@@ -99,7 +99,7 @@ func (q *RenderQueue) ProcessJob(ctx context.Context, job *models.RenderJob) (*m
 	output := &models.ImageOutput{
 		TemplateID:   tmpl.ID.Hex(),
 		TemplateSlug: tmpl.Slug,
-		Format:       models.OutputFormat(format),
+		Format:       models.RenderOutputFormat(format),
 		Width:        int(width),
 		Height:       int(height),
 		Data:         job.Data,

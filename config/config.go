@@ -2,8 +2,8 @@ package config
 
 import (
 	"os"
-
-	"github.com/KreaZcy/kzcy-config/loader"
+	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -76,7 +76,7 @@ type StorageConfig struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Port: getEnv("PORT", "7231"),
+			Port: getEnv("PORT", "9104"),
 		},
 		MongoDB: MongoDBConfig{
 			URI:      getEnv("MONGODB_URI", "mongodb://localhost:27017"),
@@ -123,8 +123,6 @@ func Load() (*Config, error) {
 		},
 	}
 
-	_ = loader.Load()
-
 	return cfg, nil
 }
 
@@ -137,8 +135,7 @@ func getEnv(key, fallback string) string {
 
 func getEnvInt(key string, fallback int) int {
 	if val := os.Getenv(key); val != "" {
-		var intVal int
-		if _, err := loader.ParseInt(val, &intVal); err == nil {
+		if intVal, err := strconv.Atoi(val); err == nil {
 			return intVal
 		}
 	}
@@ -173,26 +170,9 @@ func getEnvSlice(key string, fallback []string) []string {
 }
 
 func splitByComma(s string) []string {
-	var result []string
-	var current string
-	for _, c := range s {
-		if c == ',' {
-			result = append(result, current)
-			current = ""
-		} else {
-			current += string(c)
-		}
-	}
-	result = append(result, current)
-	return result
+	return strings.Split(s, ",")
 }
 
 func trimSpace(s string) string {
-	var result []rune
-	for _, c := range s {
-		if c != ' ' && c != '\t' {
-			result = append(result, c)
-		}
-	}
-	return string(result)
+	return strings.TrimSpace(s)
 }

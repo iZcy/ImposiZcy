@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/KreaZcy/kzcy-config/loader"
+	"github.com/KreaZcy/kzcy-config/env"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -25,7 +25,7 @@ func isWhitelisted(ip string, whitelisted []string) bool {
 
 func APIWhitelistMiddleware(provider WhitelistProvider) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if loader.IsDev() {
+		if env.IsDevelopment() {
 			c.Next()
 			return
 		}
@@ -51,7 +51,7 @@ func APIWhitelistMiddleware(provider WhitelistProvider) gin.HandlerFunc {
 
 func DashboardWhitelistMiddleware(provider WhitelistProvider) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if loader.IsDev() {
+		if env.IsDevelopment() {
 			c.Next()
 			return
 		}

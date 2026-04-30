@@ -83,10 +83,10 @@ func (h *KafkaHandler) processMessage(ctx context.Context, msg *sarama.ConsumerM
 
 	outputFormat := payload.OutputFormat
 	if outputFormat == "" {
-		outputFormat = models.OutputFormat(tmpl.OutputFormat)
+		outputFormat = models.RenderOutputFormat(tmpl.OutputFormat)
 	}
 	if outputFormat == "" {
-		outputFormat = models.OutputFormatPNG
+		outputFormat = models.RenderFormatPNG
 	}
 
 	job := &models.RenderJob{

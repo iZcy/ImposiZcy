@@ -15,12 +15,12 @@ const (
 	RenderStatusFailed     RenderJobStatus = "failed"
 )
 
-type OutputFormat string
+type RenderOutputFormat string
 
 const (
-	OutputFormatPNG  OutputFormat = "png"
-	OutputFormatJPEG OutputFormat = "jpeg"
-	OutputFormatWEBP OutputFormat = "webp"
+	RenderFormatPNG  RenderOutputFormat = "png"
+	RenderFormatJPEG RenderOutputFormat = "jpeg"
+	RenderFormatWEBP RenderOutputFormat = "webp"
 )
 
 type RenderJob struct {
@@ -28,8 +28,8 @@ type RenderJob struct {
 	TemplateID    primitive.ObjectID     `bson:"template_id" json:"template_id"`
 	TemplateSlug  string                 `bson:"template_slug" json:"template_slug"`
 	Data          map[string]interface{} `bson:"data" json:"data"`
-	Format        OutputFormat           `bson:"format" json:"format"`
-	OutputFormat  OutputFormat           `bson:"output_format" json:"output_format"`
+	Format        RenderOutputFormat     `bson:"format" json:"format"`
+	OutputFormat  RenderOutputFormat     `bson:"output_format" json:"output_format"`
 	Width         int                    `bson:"width" json:"width"`
 	Height        int                    `bson:"height" json:"height"`
 	Scale         float64                `bson:"scale" json:"scale"`
@@ -52,7 +52,7 @@ type ImageOutput struct {
 	TemplateID   string                 `bson:"template_id" json:"template_id"`
 	TemplateName string                 `bson:"template_name,omitempty" json:"template_name,omitempty"`
 	TemplateSlug string                 `bson:"template_slug" json:"template_slug"`
-	Format       OutputFormat           `bson:"format" json:"format"`
+	Format       RenderOutputFormat     `bson:"format" json:"format"`
 	Width        int                    `bson:"width" json:"width"`
 	Height       int                    `bson:"height" json:"height"`
 	DPI          int                    `bson:"dpi,omitempty" json:"dpi,omitempty"`
@@ -69,7 +69,7 @@ type ImageOutput struct {
 type RenderTriggerPayload struct {
 	TemplateSlug string                 `json:"template_slug"`
 	Data         map[string]interface{} `json:"data"`
-	OutputFormat OutputFormat           `json:"output_format,omitempty"`
+	OutputFormat RenderOutputFormat     `json:"output_format,omitempty"`
 	Width        int                    `json:"width,omitempty"`
 	Height       int                    `json:"height,omitempty"`
 	Scale        float64                `json:"scale,omitempty"`

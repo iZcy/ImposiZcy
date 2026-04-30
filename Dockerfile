@@ -6,13 +6,21 @@ RUN apk add --no-cache git gcc musl-dev
 
 WORKDIR /build
 
-COPY go.mod go.sum ./
+COPY libs/kzcy-config/go.mod /build/libs/kzcy-config/go.mod
+COPY libs/kzcy-dashboard/go.mod /build/libs/kzcy-dashboard/go.mod
+COPY services/ImposiZcy/ImposiZcy/go.mod /build/services/ImposiZcy/ImposiZcy/go.mod
+COPY services/ImposiZcy/ImposiZcy/go.sum /build/services/ImposiZcy/ImposiZcy/go.sum
+
+COPY go.work /build/go.work
+
+WORKDIR /build/services/ImposiZcy/ImposiZcy
 
 RUN go mod download
 
-COPY . .
+COPY libs/kzcy-config/ /build/libs/kzcy-config/
+COPY libs/kzcy-dashboard/ /build/libs/kzcy-dashboard/
+COPY services/ImposiZcy/ImposiZcy/ /build/services/ImposiZcy/ImposiZcy/
 
-RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o imposizcy-server ./cmd/server
 
 FROM alpine:latest
@@ -25,12 +33,12 @@ ENV TZ=Asia/Jakarta
 ENV GIN_MODE=release
 ENV CHROME_PATH=/usr/bin/chromium-browser
 
-COPY --from=builder /build/imposizcy-server .
-COPY --from=builder /build/templates/ ./templates/
-COPY --from=builder /build/public/ ./public/
+COPY --from=builder /build/services/ImposiZcy/ImposiZcy/imposizcy-server .
+COPY --from=builder /build/services/ImposiZcy/ImposiZcy/templates/ ./templates/
+COPY --from=builder /build/services/ImposiZcy/ImposiZcy/public/ ./public/
 
 RUN chmod +x ./imposizcy-server
 
-EXPOSE 7231
+EXPOSE 9104
 
 CMD ["./imposizcy-server"]

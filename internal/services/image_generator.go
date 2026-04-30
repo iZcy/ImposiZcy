@@ -71,7 +71,7 @@ func (s *ImageGeneratorService) GenerateFromHTML(ctx context.Context, html strin
 
 			if format == "jpeg" {
 				imageBin, err = page.CaptureScreenshot().
-					WithQuality(float64(quality) / 100.0).
+					WithQuality(int64(float64(quality) * 100 / 100)).
 					WithClip(&page.Viewport{
 						X:      0,
 						Y:      0,
