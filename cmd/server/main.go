@@ -19,6 +19,9 @@ import (
 	"github.com/iZcy/imposizcy/internal/repositories"
 	"github.com/iZcy/imposizcy/internal/services"
 	"github.com/sirupsen/logrus"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
@@ -60,6 +63,13 @@ func main() {
 
 	db := mongoService.GetDatabase()
 
+	// Seed default settings
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := seedSettings(ctx, db); err != nil {
+		logger.WithError(err).Warn("Failed to seed default settings")
+	}
+	cancel()
+
 	templateRepo := repositories.NewTemplateRepository(db)
 	renderJobRepo := repositories.NewRenderJobRepository(db)
 	imageOutputRepo := repositories.NewImageOutputRepository(db)
@@ -69,7 +79,8 @@ func main() {
 	apiKeyRepo := repositories.NewAPIKeyRepository(db)
 	kafkaConnRepo := repositories.NewKafkaConnectionRepository(db)
 
-	rendererService := services.NewRendererService(logger)
+	barcodeService := services.NewBarcodeService()
+	rendererService := services.NewRendererService(logger, barcodeService)
 	validatorService := services.NewValidatorService(logger)
 	imageGenerator := services.NewImageGeneratorService(logger)
 
@@ -248,12 +259,44 @@ func main() {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.WithError(err).Fatal("Server forced to shutdown")
 	}
 
 	logger.Info("Server exited")
+}
+
+func seedSettings(ctx context.Context, db *mongo.Database) error {
+	defaults := []struct {
+		key      string
+		value    string
+		category string
+	}{
+		{"admin_password", "admin123", "security"},
+		{"jwt_secret", "imposizcy-default-jwt-secret-change-me", "security"},
+		{"dashboard_ip_whitelist", "", "security"},
+		{"api_ip_whitelist", "", "security"},
+	}
+	for _, d := range defaults {
+		_, err := db.Collection("settings").UpdateOne(
+			ctx,
+			bson.M{"key": d.key},
+			bson.M{"$set": bson.M{
+				"key":        d.key,
+				"value":      d.value,
+				"category":   d.category,
+				"updated_at": time.Now(),
+			}, "$setOnInsert": bson.M{
+				"created_at": time.Now(),
+			}},
+			options.Update().SetUpsert(true),
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -79,7 +79,7 @@ func Load() (*Config, error) {
 			Port: getEnv("PORT", "9104"),
 		},
 		MongoDB: MongoDBConfig{
-			URI:      getEnv("MONGODB_URI", "mongodb://localhost:27017"),
+			URI:      getEnv("MONGODB_URI", "mongodb://app_user:app_pass@localhost:27022/imposizcy?authSource=test"),
 			Database: getEnv("MONGODB_DATABASE", "imposizcy"),
 		},
 		Logging: LoggingConfig{

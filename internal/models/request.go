@@ -37,36 +37,38 @@ type BatchRenderResponse struct {
 }
 
 type CreateTemplateRequest struct {
-	Name         string        `json:"name" validate:"required"`
-	Slug         string        `json:"slug" validate:"required"`
-	Description  string        `json:"description,omitempty"`
-	HTML         string        `json:"html" validate:"required"`
-	CSS          string        `json:"css,omitempty"`
-	DataSchema   string        `json:"data_schema" validate:"required"`
-	Width        float64       `json:"width" validate:"required"`
-	Height       float64       `json:"height" validate:"required"`
-	DimensionUnit DimensionUnit `json:"dimension_unit,omitempty"`
-	DPI          int           `json:"dpi,omitempty"`
-	OutputFormat string        `json:"output_format,omitempty"`
-	Quality      int           `json:"quality,omitempty"`
-	Tags         []Tag         `json:"tags,omitempty"`
-	IsActive     *bool         `json:"is_active,omitempty"`
+	Name         string             `json:"name" validate:"required"`
+	Slug         string             `json:"slug" validate:"required"`
+	Description  string             `json:"description,omitempty"`
+	HTML         string             `json:"html" validate:"required"`
+	CSS          string             `json:"css,omitempty"`
+	DataSchema   string             `json:"data_schema,omitempty"`
+	Variables    []TemplateVariable `json:"variables,omitempty"`
+	Width        float64            `json:"width" validate:"required"`
+	Height       float64            `json:"height" validate:"required"`
+	DimensionUnit DimensionUnit     `json:"dimension_unit,omitempty"`
+	DPI          int                `json:"dpi,omitempty"`
+	OutputFormat string             `json:"output_format,omitempty"`
+	Quality      int                `json:"quality,omitempty"`
+	Tags         []Tag              `json:"tags,omitempty"`
+	IsActive     *bool              `json:"is_active,omitempty"`
 }
 
 type UpdateTemplateRequest struct {
-	Name         *string       `json:"name,omitempty"`
-	Description  *string       `json:"description,omitempty"`
-	HTML         *string       `json:"html,omitempty"`
-	CSS          *string       `json:"css,omitempty"`
-	DataSchema   *string       `json:"data_schema,omitempty"`
-	Width        *float64      `json:"width,omitempty"`
-	Height       *float64      `json:"height,omitempty"`
-	DimensionUnit *DimensionUnit `json:"dimension_unit,omitempty"`
-	DPI          *int          `json:"dpi,omitempty"`
-	OutputFormat *string       `json:"output_format,omitempty"`
-	Quality      *int          `json:"quality,omitempty"`
-	Tags         []Tag         `json:"tags,omitempty"`
-	IsActive     *bool         `json:"is_active,omitempty"`
+	Name         *string            `json:"name,omitempty"`
+	Description  *string            `json:"description,omitempty"`
+	HTML         *string            `json:"html,omitempty"`
+	CSS          *string            `json:"css,omitempty"`
+	DataSchema   *string            `json:"data_schema,omitempty"`
+	Variables    []TemplateVariable `json:"variables,omitempty"`
+	Width        *float64           `json:"width,omitempty"`
+	Height       *float64           `json:"height,omitempty"`
+	DimensionUnit *DimensionUnit    `json:"dimension_unit,omitempty"`
+	DPI          *int               `json:"dpi,omitempty"`
+	OutputFormat *string            `json:"output_format,omitempty"`
+	Quality      *int               `json:"quality,omitempty"`
+	Tags         []Tag              `json:"tags,omitempty"`
+	IsActive     *bool              `json:"is_active,omitempty"`
 }
 
 type ErrorResponse struct {

@@ -53,18 +53,20 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 	}
 
 	template := &models.PrintTemplate{
-		Name:         req.Name,
-		Slug:         req.Slug,
-		HTML:         req.HTML,
-		DataSchema:   req.DataSchema,
-		Width:        req.Width,
-		Height:       req.Height,
+		Name:          req.Name,
+		Slug:          req.Slug,
+		HTML:          req.HTML,
+		CSS:           req.CSS,
+		DataSchema:    req.DataSchema,
+		Variables:     req.Variables,
+		Width:         req.Width,
+		Height:        req.Height,
 		DimensionUnit: req.DimensionUnit,
-		DPI:          req.DPI,
-		OutputFormat: models.OutputFormatType(req.OutputFormat),
-		Quality:      req.Quality,
-		Tags:         req.Tags,
-		IsActive:     isActive,
+		DPI:           req.DPI,
+		OutputFormat:  models.OutputFormatType(req.OutputFormat),
+		Quality:       req.Quality,
+		Tags:          req.Tags,
+		IsActive:      isActive,
 	}
 
 	if err := h.templateRepo.Create(c.Request.Context(), template); err != nil {
@@ -171,6 +173,9 @@ func (h *TemplateHandler) Update(c *gin.Context) {
 	if req.HTML != nil {
 		template.HTML = *req.HTML
 	}
+	if req.CSS != nil {
+		template.CSS = *req.CSS
+	}
 	if req.DataSchema != nil {
 		template.DataSchema = *req.DataSchema
 	}
@@ -194,6 +199,9 @@ func (h *TemplateHandler) Update(c *gin.Context) {
 	}
 	if req.IsActive != nil {
 		template.IsActive = *req.IsActive
+	}
+	if req.Variables != nil {
+		template.Variables = req.Variables
 	}
 
 	if err := h.templateRepo.Update(c.Request.Context(), template); err != nil {

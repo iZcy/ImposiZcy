@@ -7,6 +7,7 @@ import (
 	"github.com/iZcy/imposizcy/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const settingsCollection = "settings"
@@ -41,10 +42,14 @@ func (r *SettingsRepository) Set(ctx context.Context, key, value string, categor
 		ctx,
 		bson.M{"key": key},
 		bson.M{"$set": bson.M{
+			"key":        key,
 			"value":      value,
 			"category":   cat,
 			"updated_at": time.Now(),
+		}, "$setOnInsert": bson.M{
+			"created_at": time.Now(),
 		}},
+		options.Update().SetUpsert(true),
 	)
 	if err != nil {
 		return err

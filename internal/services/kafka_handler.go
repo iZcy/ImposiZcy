@@ -108,7 +108,7 @@ func (h *KafkaHandler) processMessage(ctx context.Context, msg *sarama.ConsumerM
 	job.UpdatedAt = time.Now()
 	_ = h.renderJobRepo.Update(ctx, job)
 
-	html, err := h.renderer.RenderHTML(tmpl.HTML, payload.Data)
+	html, err := h.renderer.RenderHTML(tmpl.HTML, tmpl.CSS, tmpl.Variables, payload.Data)
 	if err != nil {
 		job.Status = models.RenderStatusFailed
 		job.Error = err.Error()

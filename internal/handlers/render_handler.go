@@ -100,7 +100,7 @@ func (h *RenderHandler) Render(c *gin.Context) {
 		}
 	}
 
-	renderedHTML, err := h.renderer.RenderHTML(template.HTML, req.Data)
+	renderedHTML, err := h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, req.Data)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to render template")
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
@@ -291,7 +291,7 @@ func (h *RenderHandler) processJobAsync(job *models.RenderJob, template *models.
 		}
 	}
 
-	renderedHTML, err := h.renderer.RenderHTML(template.HTML, job.Data)
+	renderedHTML, err := h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, job.Data)
 	if err != nil {
 		job.Status = models.RenderStatusFailed
 		job.Error = err.Error()

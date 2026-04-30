@@ -65,7 +65,7 @@ func (q *RenderQueue) ProcessJob(ctx context.Context, job *models.RenderJob) (*m
 		}
 	}
 
-	html, err := q.renderer.RenderHTML(tmpl.HTML, job.Data)
+	html, err := q.renderer.RenderHTML(tmpl.HTML, tmpl.CSS, tmpl.Variables, job.Data)
 	if err != nil {
 		return nil, fmt.Errorf("render failed: %w", err)
 	}
