@@ -23,7 +23,7 @@ func (s *BarcodeService) GenerateBarcode(content string, format string, width in
 	case "code128":
 		return s.generateCode128(content, width, height)
 	case "qr":
-		return s.generateQRPlaceholder(content, width, height)
+		return s.generateQRCode(content, width, height)
 	case "ean13":
 		return s.generateEAN13(content, width, height)
 	case "code39":
@@ -124,31 +124,32 @@ func (s *BarcodeService) emptyBarcode(width int, height int, label string) strin
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d"><rect width="100%%" height="100%%" fill="white"/><text x="%d" y="%d" text-anchor="middle" font-family="monospace" font-size="12" fill="black">%s</text></svg>`, width, height, width/2, height/2, label)
 }
 
-// generateQRPlaceholder creates a QR code placeholder
-func (s *BarcodeService) generateQRPlaceholder(content string, width int, height int) (string, error) {
+// generateQRCode creates a real scannable QR code as SVG
+func (s *BarcodeService) generateQRCode(content string, width int, height int) (string, error) {
 	if content == "" {
 		return "", fmt.Errorf("QR code content cannot be empty")
 	}
 
-	// Simple QR-like pattern using a grid
-	cellSize := width / 21 // Standard QR has 21x21 modules for version 1
+	modules, size, err := generateQR(content)
+	if err != nil {
+		return "", err
+	}
+	cellSize := width / (size + 8)
 	if cellSize < 2 {
 		cellSize = 2
 	}
+	totalSize := cellSize * (size + 8)
+	offset := cellSize * 4
 
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`, width, height, width, height))
-	buf.WriteString(`<rect width="100%" height="100%" fill="white"/>`)
+	buf.WriteString(fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">`, totalSize, totalSize, totalSize, totalSize))
+	buf.WriteString(fmt.Sprintf(`<rect width="100%%" height="100%%" fill="white"/>`))
 
-	// Generate a deterministic pattern from content
-	pattern := s.generateQRPattern(content, 21)
-
-	for row := 0; row < 21; row++ {
-		for col := 0; col < 21; col++ {
-			idx := row*21 + col
-			if idx < len(pattern) && pattern[idx] == 1 {
-				x := col * cellSize
-				y := row * cellSize
+	for row := 0; row < size; row++ {
+		for col := 0; col < size; col++ {
+			if modules[row*size+col] {
+				x := offset + col*cellSize
+				y := offset + row*cellSize
 				buf.WriteString(fmt.Sprintf(`<rect x="%d" y="%d" width="%d" height="%d" fill="black"/>`, x, y, cellSize, cellSize))
 			}
 		}
@@ -157,47 +158,6 @@ func (s *BarcodeService) generateQRPlaceholder(content string, width int, height
 	buf.WriteString(`</svg>`)
 	base64SVG := base64.StdEncoding.EncodeToString([]byte(buf.String()))
 	return "data:image/svg+xml;base64," + base64SVG, nil
-}
-
-// generateQRPattern creates a deterministic bit pattern from content
-func (s *BarcodeService) generateQRPattern(content string, size int) []int {
-	pattern := make([]int, size*size)
-	// Seed pattern from content hash
-	for i, ch := range content {
-		idx := (i * int(ch)) % len(pattern)
-		pattern[idx] = 1
-		if idx+1 < len(pattern) {
-			pattern[idx+1] = 1
-		}
-	}
-
-	// Add finder patterns (the three squares in corners)
-	// Top-left finder pattern
-	for row := 0; row < 7; row++ {
-		for col := 0; col < 7; col++ {
-			if row == 0 || row == 6 || col == 0 || col == 6 || (row >= 2 && row <= 4 && col >= 2 && col <= 4) {
-				pattern[row*size+col] = 1
-			}
-		}
-	}
-	// Top-right finder pattern
-	for row := 0; row < 7; row++ {
-		for col := 0; col < 7; col++ {
-			if row == 0 || row == 6 || col == 0 || col == 6 || (row >= 2 && row <= 4 && col >= 2 && col <= 4) {
-				pattern[row*size+(size-7+col)] = 1
-			}
-		}
-	}
-	// Bottom-left finder pattern
-	for row := 0; row < 7; row++ {
-		for col := 0; col < 7; col++ {
-			if row == 0 || row == 6 || col == 0 || col == 6 || (row >= 2 && row <= 4 && col >= 2 && col <= 4) {
-				pattern[(size-7+row)*size+col] = 1
-			}
-		}
-	}
-
-	return pattern
 }
 
 // generateEAN13 creates an EAN-13 barcode placeholder
