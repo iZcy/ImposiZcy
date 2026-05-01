@@ -65,13 +65,17 @@ func (s *RendererService) RenderHTML(htmlTemplate string, css string, variables 
 			if format == "" {
 				format = string(models.BarcodeFormatCode128)
 			}
-			dataURI, err := s.barcodeService.GenerateBarcode(strVal, format, 200, 80)
+			bw, bh := 200, 80
+			if format == "qr" {
+				bw, bh = 200, 200
+			}
+			dataURI, err := s.barcodeService.GenerateBarcode(strVal, format, bw, bh)
 			if err != nil {
 				s.logger.WithError(err).WithField("variable", variable.Name).Error("Failed to generate barcode")
 				processedData[variable.Name] = ""
 				continue
 			}
-			processedData[variable.Name] = dataURI
+			processedData[variable.Name] = fmt.Sprintf(`<img src="%s" alt="barcode" style="max-width:100%%;height:auto;" />`, dataURI)
 		default:
 			processedData[variable.Name] = strVal
 		}
