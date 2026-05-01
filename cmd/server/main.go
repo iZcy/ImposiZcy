@@ -80,9 +80,13 @@ func main() {
 	kafkaConnRepo := repositories.NewKafkaConnectionRepository(db)
 
 	barcodeService := services.NewBarcodeService()
-	rendererService := services.NewRendererService(logger, barcodeService)
+	rendererService := services.NewRendererService(logger, barcodeService, cfg.Storage.UploadDir)
 	validatorService := services.NewValidatorService(logger)
 	imageGenerator := services.NewImageGeneratorService(logger)
+	uploadService := services.NewUploadService(cfg, logger)
+	if err := uploadService.EnsureUploadDir(); err != nil {
+		logger.WithError(err).Fatal("Failed to create upload directory")
+	}
 
 	var wsHandler *handlers.WebSocketHandler
 	if cfg.Dashboard.Enabled {
@@ -96,6 +100,7 @@ func main() {
 		wsHandler, logger,
 	)
 	imageHandler := handlers.NewImageHandler(imageOutputRepo, logger)
+	uploadHandler := handlers.NewUploadHandler(uploadService, cfg, logger)
 
 	var dashboardHandler *handlers.DashboardHandler
 	var rbacHandler *handlers.RBACHandler
@@ -167,6 +172,9 @@ func main() {
 		v1.GET("/images/:id/download", imageHandler.Download)
 		v1.GET("/images", imageHandler.List)
 		v1.DELETE("/images/:id", imageHandler.Delete)
+
+		v1.POST("/upload/background", uploadHandler.UploadBackground)
+		v1.POST("/upload/asset", uploadHandler.UploadTemplateAsset)
 	}
 
 	if cfg.Dashboard.Enabled {
@@ -213,6 +221,8 @@ func main() {
 		}
 
 	}
+
+	router.Static("/uploads", cfg.Storage.UploadDir)
 
 	isDev := gin.Mode() == gin.DebugMode
 	if isDev {

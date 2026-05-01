@@ -53,20 +53,22 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 	}
 
 	template := &models.PrintTemplate{
-		Name:          req.Name,
-		Slug:          req.Slug,
-		HTML:          req.HTML,
-		CSS:           req.CSS,
-		DataSchema:    req.DataSchema,
-		Variables:     req.Variables,
-		Width:         req.Width,
-		Height:        req.Height,
-		DimensionUnit: req.DimensionUnit,
-		DPI:           req.DPI,
-		OutputFormat:  models.OutputFormatType(req.OutputFormat),
-		Quality:       req.Quality,
-		Tags:          req.Tags,
-		IsActive:      isActive,
+		Name:            req.Name,
+		Slug:            req.Slug,
+		HTML:            req.HTML,
+		CSS:             req.CSS,
+		DataSchema:      req.DataSchema,
+		Variables:       req.Variables,
+		FieldMapping:    req.FieldMapping,
+		BackgroundImage: func() string { if req.BackgroundImage != nil { return *req.BackgroundImage }; return "" }(),
+		Width:           req.Width,
+		Height:          req.Height,
+		DimensionUnit:   req.DimensionUnit,
+		DPI:             req.DPI,
+		OutputFormat:    models.OutputFormatType(req.OutputFormat),
+		Quality:         req.Quality,
+		Tags:            req.Tags,
+		IsActive:        isActive,
 	}
 
 	if err := h.templateRepo.Create(c.Request.Context(), template); err != nil {
@@ -202,6 +204,12 @@ func (h *TemplateHandler) Update(c *gin.Context) {
 	}
 	if req.Variables != nil {
 		template.Variables = req.Variables
+	}
+	if req.BackgroundImage != nil {
+		template.BackgroundImage = *req.BackgroundImage
+	}
+	if req.FieldMapping != nil {
+		template.FieldMapping = req.FieldMapping
 	}
 
 	if err := h.templateRepo.Update(c.Request.Context(), template); err != nil {

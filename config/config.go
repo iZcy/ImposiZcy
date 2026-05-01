@@ -69,8 +69,10 @@ type RenderingConfig struct {
 }
 
 type StorageConfig struct {
-	OutputDir string `json:"output_dir"`
-	BaseURL   string `json:"base_url"`
+	OutputDir    string `json:"output_dir"`
+	UploadDir    string `json:"upload_dir"`
+	BaseURL      string `json:"base_url"`
+	MaxUploadMB  int    `json:"max_upload_mb"`
 }
 
 func Load() (*Config, error) {
@@ -107,8 +109,10 @@ func Load() (*Config, error) {
 			DefaultQuality: getEnvInt("DEFAULT_RENDER_QUALITY", 90),
 		},
 		Storage: StorageConfig{
-			OutputDir: getEnv("OUTPUT_DIR", "./data/outputs"),
-			BaseURL:   getEnv("OUTPUT_BASE_URL", ""),
+			OutputDir:   getEnv("OUTPUT_DIR", "./data/outputs"),
+			UploadDir:   getEnv("UPLOAD_DIR", "./data/uploads"),
+			BaseURL:     getEnv("OUTPUT_BASE_URL", ""),
+			MaxUploadMB: getEnvInt("MAX_UPLOAD_MB", 10),
 		},
 		Kafka: KafkaConfig{
 			Enabled:        getEnvBool("KAFKA_ENABLED", false),

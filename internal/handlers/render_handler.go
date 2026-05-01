@@ -100,7 +100,21 @@ func (h *RenderHandler) Render(c *gin.Context) {
 		}
 	}
 
-	renderedHTML, err := h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, req.Data)
+	// Apply field mapping if defined (NotifikaZcy-style source → variable mapping)
+	data := req.Data
+	if len(template.FieldMapping) > 0 {
+		data = services.ApplyFieldMapping(req.Data, template.FieldMapping)
+	}
+
+	// Choose rendering strategy based on template type
+	var renderedHTML string
+	if template.BackgroundImage != "" {
+		// Position-based rendering (DocuSign-style overlay on background image)
+		renderedHTML, err = h.renderer.RenderPositioned(template, data)
+	} else {
+		// HTML template rendering (classic mode)
+		renderedHTML, err = h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, data)
+	}
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to render template")
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
@@ -291,7 +305,18 @@ func (h *RenderHandler) processJobAsync(job *models.RenderJob, template *models.
 		}
 	}
 
-	renderedHTML, err := h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, job.Data)
+	data := job.Data
+	if len(template.FieldMapping) > 0 {
+		data = services.ApplyFieldMapping(job.Data, template.FieldMapping)
+	}
+
+	var renderedHTML string
+	var err error
+	if template.BackgroundImage != "" {
+		renderedHTML, err = h.renderer.RenderPositioned(template, data)
+	} else {
+		renderedHTML, err = h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, data)
+	}
 	if err != nil {
 		job.Status = models.RenderStatusFailed
 		job.Error = err.Error()
