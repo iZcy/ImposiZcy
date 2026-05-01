@@ -12,15 +12,18 @@ import (
 )
 
 type DashboardHandler struct {
-	templateRepo  *repositories.TemplateRepository
-	renderJobRepo *repositories.RenderJobRepository
-	imageRepo     *repositories.ImageOutputRepository
-	settingsRepo  *repositories.SettingsRepository
-	kafkaConnRepo *repositories.KafkaConnectionRepository
-	renderer      *services.RendererService
-	validator     *services.ValidatorService
-	imageGen      *services.ImageGeneratorService
-	logger        *logrus.Logger
+	templateRepo     *repositories.TemplateRepository
+	renderJobRepo    *repositories.RenderJobRepository
+	imageRepo        *repositories.ImageOutputRepository
+	settingsRepo     *repositories.SettingsRepository
+	kafkaConnRepo    *repositories.KafkaConnectionRepository
+	eventMappingRepo *repositories.EventMappingRepository
+	kafkaLogRepo     *repositories.KafkaLogRepository
+	kafkaManager     *services.KafkaManager
+	renderer         *services.RendererService
+	validator        *services.ValidatorService
+	imageGen         *services.ImageGeneratorService
+	logger           *logrus.Logger
 }
 
 func NewDashboardHandler(
@@ -45,6 +48,18 @@ func NewDashboardHandler(
 		imageGen:      imageGen,
 		logger:       logger,
 	}
+}
+
+func (h *DashboardHandler) SetEventMappingRepo(repo *repositories.EventMappingRepository) {
+	h.eventMappingRepo = repo
+}
+
+func (h *DashboardHandler) SetKafkaLogRepo(repo *repositories.KafkaLogRepository) {
+	h.kafkaLogRepo = repo
+}
+
+func (h *DashboardHandler) SetKafkaManager(mgr *services.KafkaManager) {
+	h.kafkaManager = mgr
 }
 
 func (h *DashboardHandler) ListTemplates(c *gin.Context) {
@@ -74,19 +89,19 @@ func (h *DashboardHandler) CreateTemplate(c *gin.Context) {
 	}
 
 	template := &models.PrintTemplate{
-		Name:         req.Name,
-		Slug:         req.Slug,
-		HTML:         req.HTML,
-		CSS:          req.CSS,
-		DataSchema:   req.DataSchema,
-		Width:        req.Width,
-		Height:       req.Height,
+		Name:          req.Name,
+		Slug:          req.Slug,
+		HTML:          req.HTML,
+		CSS:           req.CSS,
+		DataSchema:    req.DataSchema,
+		Width:         req.Width,
+		Height:        req.Height,
 		DimensionUnit: req.DimensionUnit,
-		DPI:          req.DPI,
-		OutputFormat: models.OutputFormatType(req.OutputFormat),
-		Quality:      req.Quality,
-		Tags:         req.Tags,
-		IsActive:     true,
+		DPI:           req.DPI,
+		OutputFormat:  models.OutputFormatType(req.OutputFormat),
+		Quality:       req.Quality,
+		Tags:          req.Tags,
+		IsActive:      true,
 	}
 
 	if err := h.templateRepo.Create(c.Request.Context(), template); err != nil {
@@ -233,60 +248,126 @@ func (h *DashboardHandler) ListKafkaConnections(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 		return
 	}
+
+	if h.kafkaManager != nil {
+		statuses := h.kafkaManager.GetConnectionStatus()
+		for _, conn := range conns {
+			for _, st := range statuses {
+				if st.ID == conn.ID.Hex() {
+					// merge status into response
+					break
+				}
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": conns})
 }
 
 func (h *DashboardHandler) CreateKafkaConnection(c *gin.Context) {
-	var conn repositories.KafkaConnection
-	if err := c.ShouldBindJSON(&conn); err != nil {
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Broker      string `json:"broker" binding:"required"`
+		Topic       string `json:"topic" binding:"required"`
+		GroupID     string `json:"group_id"`
+		ClientID    string `json:"client_id"`
+		AutoOffset  string `json:"auto_offset"`
+		Enabled     *bool  `json:"enabled"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
 		return
 	}
-	if err := h.kafkaConnRepo.Create(c.Request.Context(), &conn); err != nil {
+
+	conn := repositories.NewKafkaConnection(&repositories.KafkaConnection{
+		Name:        req.Name,
+		Broker:      req.Broker,
+		Topic:       req.Topic,
+		GroupID:     req.GroupID,
+		ClientID:    req.ClientID,
+		AutoOffset:  req.AutoOffset,
+		Description: req.Description,
+		Enabled:     true,
+	})
+	if req.Enabled != nil {
+		conn.Enabled = *req.Enabled
+	}
+
+	if err := h.kafkaConnRepo.Create(c.Request.Context(), conn); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 		return
 	}
+
+	if conn.Enabled && h.kafkaManager != nil {
+		_ = h.kafkaManager.StartConnection(c.Request.Context(), conn)
+	}
+
 	c.JSON(http.StatusCreated, gin.H{"success": true, "data": conn})
 }
 
 func (h *DashboardHandler) UpdateKafkaConnection(c *gin.Context) {
 	id := c.Param("id")
 	var req struct {
-		Name    string   `json:"name"`
-		Brokers []string `json:"brokers"`
-		Topics  []string `json:"topics"`
-		GroupID string   `json:"group_id"`
-		Active  *bool    `json:"active"`
+		Name        string `json:"name"`
+		Broker      string `json:"broker"`
+		Topic       string `json:"topic"`
+		GroupID     string `json:"group_id"`
+		ClientID    string `json:"client_id"`
+		AutoOffset  string `json:"auto_offset"`
+		Enabled     *bool  `json:"enabled"`
+		Description string `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
 		return
 	}
+
 	update := bson.M{}
 	if req.Name != "" {
 		update["name"] = req.Name
 	}
-	if req.Brokers != nil {
-		update["brokers"] = req.Brokers
+	if req.Broker != "" {
+		update["broker"] = req.Broker
 	}
-	if req.Topics != nil {
-		update["topics"] = req.Topics
+	if req.Topic != "" {
+		update["topic"] = req.Topic
 	}
 	if req.GroupID != "" {
 		update["group_id"] = req.GroupID
 	}
-	if req.Active != nil {
-		update["active"] = *req.Active
+	if req.ClientID != "" {
+		update["client_id"] = req.ClientID
 	}
+	if req.AutoOffset != "" {
+		update["auto_offset"] = req.AutoOffset
+	}
+	if req.Description != "" {
+		update["description"] = req.Description
+	}
+	if req.Enabled != nil {
+		update["enabled"] = *req.Enabled
+	}
+
 	if err := h.kafkaConnRepo.Update(c.Request.Context(), id, update); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 		return
 	}
+
+	if h.kafkaManager != nil {
+		_ = h.kafkaManager.RestartConnection(c.Request.Context(), id)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Connection updated"})
 }
 
 func (h *DashboardHandler) DeleteKafkaConnection(c *gin.Context) {
 	id := c.Param("id")
+
+	if h.kafkaManager != nil {
+		_ = h.kafkaManager.StopConnection(id)
+	}
+
 	if err := h.kafkaConnRepo.Delete(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Connection not found"})
 		return
@@ -295,9 +376,187 @@ func (h *DashboardHandler) DeleteKafkaConnection(c *gin.Context) {
 }
 
 func (h *DashboardHandler) StartKafkaConnection(c *gin.Context) {
+	id := c.Param("id")
+	if h.kafkaManager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Kafka manager not available"})
+		return
+	}
+	if err := h.kafkaManager.RestartConnection(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Kafka connection started"})
 }
 
 func (h *DashboardHandler) StopKafkaConnection(c *gin.Context) {
+	id := c.Param("id")
+	if h.kafkaManager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Kafka manager not available"})
+		return
+	}
+	if err := h.kafkaManager.StopConnection(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Kafka connection stopped"})
+}
+
+func (h *DashboardHandler) ListEventMappings(c *gin.Context) {
+	if h.eventMappingRepo == nil {
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": []models.EventMapping{}})
+		return
+	}
+	mappings, err := h.eventMappingRepo.GetAll(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": mappings})
+}
+
+func (h *DashboardHandler) CreateEventMapping(c *gin.Context) {
+	if h.eventMappingRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Event mapping not available"})
+		return
+	}
+
+	var req models.EventMappingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	if req.ConnectionID != "" {
+		if _, err := h.kafkaConnRepo.GetByID(c.Request.Context(), req.ConnectionID); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Connection not found"})
+			return
+		}
+	}
+
+	active := true
+	if req.Active != nil {
+		active = *req.Active
+	}
+
+	mapping := &models.EventMapping{
+		EventType:        req.EventType,
+		TemplateSlug:    req.TemplateSlug,
+		ConnectionID:    req.ConnectionID,
+		Description:     req.Description,
+		Active:          active,
+		FilterConditions: req.FilterConditions,
+	}
+
+	if err := h.eventMappingRepo.Create(c.Request.Context(), mapping); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"success": true, "data": mapping})
+}
+
+func (h *DashboardHandler) UpdateEventMapping(c *gin.Context) {
+	if h.eventMappingRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Event mapping not available"})
+		return
+	}
+
+	id := c.Param("id")
+	var req models.EventMappingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	existing, err := h.eventMappingRepo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Event mapping not found"})
+		return
+	}
+
+	if req.EventType != "" {
+		existing.EventType = req.EventType
+	}
+	if req.TemplateSlug != "" {
+		existing.TemplateSlug = req.TemplateSlug
+	}
+	if req.Description != "" {
+		existing.Description = req.Description
+	}
+	if req.Active != nil {
+		existing.Active = *req.Active
+	}
+	if req.ConnectionID != "" {
+		existing.ConnectionID = req.ConnectionID
+	}
+	if req.FilterConditions != nil {
+		existing.FilterConditions = req.FilterConditions
+	}
+
+	if err := h.eventMappingRepo.Update(c.Request.Context(), id, existing); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": existing})
+}
+
+func (h *DashboardHandler) DeleteEventMapping(c *gin.Context) {
+	if h.eventMappingRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "error": "Event mapping not available"})
+		return
+	}
+
+	id := c.Param("id")
+	if err := h.eventMappingRepo.Delete(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Event mapping not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Event mapping deleted"})
+}
+
+func (h *DashboardHandler) ListKafkaLogs(c *gin.Context) {
+	if h.kafkaLogRepo == nil {
+		c.JSON(http.StatusOK, models.KafkaLogListResponse{Success: true, Data: []*models.KafkaLog{}, Total: 0, Page: 1, PerPage: 20})
+		return
+	}
+
+	var filter models.KafkaLogFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	logs, total, err := h.kafkaLogRepo.List(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := filter.PageSize
+	if pageSize < 1 {
+		pageSize = 20
+	}
+
+	c.JSON(http.StatusOK, models.KafkaLogListResponse{
+		Success: true,
+		Data:    logs,
+		Total:   total,
+		Page:    page,
+		PerPage: pageSize,
+	})
+}
+
+func (h *DashboardHandler) ClearKafkaLogs(c *gin.Context) {
+	if h.kafkaLogRepo == nil {
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Logs cleared"})
+		return
+	}
+	if err := h.kafkaLogRepo.DeleteAll(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Logs cleared"})
 }

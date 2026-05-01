@@ -63,7 +63,6 @@ func main() {
 
 	db := mongoService.GetDatabase()
 
-	// Seed default settings
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	if err := seedSettings(ctx, db); err != nil {
 		logger.WithError(err).Warn("Failed to seed default settings")
@@ -78,6 +77,8 @@ func main() {
 	externalRoleRepo := repositories.NewExternalRoleRepository(db)
 	apiKeyRepo := repositories.NewAPIKeyRepository(db)
 	kafkaConnRepo := repositories.NewKafkaConnectionRepository(db)
+	eventMappingRepo := repositories.NewEventMappingRepository(db)
+	kafkaLogRepo := repositories.NewKafkaLogRepository(db)
 
 	barcodeService := services.NewBarcodeService()
 	rendererService := services.NewRendererService(logger, barcodeService, cfg.Storage.UploadDir)
@@ -105,7 +106,7 @@ func main() {
 	var dashboardHandler *handlers.DashboardHandler
 	var rbacHandler *handlers.RBACHandler
 	var securityHandler *handlers.SecurityHandler
-	var kafkaService *services.KafkaService
+	var kafkaManager *services.KafkaManager
 
 	if cfg.Dashboard.Enabled {
 		dashboardHandler = handlers.NewDashboardHandler(
@@ -114,27 +115,28 @@ func main() {
 			rendererService, validatorService, imageGenerator,
 			logger,
 		)
+		dashboardHandler.SetEventMappingRepo(eventMappingRepo)
+		dashboardHandler.SetKafkaLogRepo(kafkaLogRepo)
+
 		rbacHandler = handlers.NewRBACHandler(internalRoleRepo, externalRoleRepo, logger)
 		securityHandler = handlers.NewSecurityHandler(apiKeyRepo, settingsRepo, logger)
 
 		kafkaHandler := services.NewKafkaHandler(
 			templateRepo, renderJobRepo,
+			eventMappingRepo, kafkaLogRepo,
 			rendererService, validatorService, imageGenerator,
 			logger,
 		)
 
-		kafkaService, err = services.NewKafkaService(&cfg.Kafka, logger, kafkaHandler)
-		if err != nil {
-			logger.WithError(err).Error("Failed to create Kafka service")
-		}
-		if kafkaService != nil {
-			go func() {
-				if err := kafkaService.Start(); err != nil {
-					logger.WithError(err).Error("Kafka consumer error")
-				}
-			}()
-			logger.Info("Kafka service initialized")
-		}
+		kafkaManager = services.NewKafkaManager(logger, kafkaHandler, kafkaConnRepo)
+		dashboardHandler.SetKafkaManager(kafkaManager)
+
+		go func() {
+			if err := kafkaManager.StartAll(context.Background()); err != nil {
+				logger.WithError(err).Error("Failed to start Kafka connections")
+			}
+		}()
+		logger.Info("Kafka manager initialized")
 	}
 
 	rateLimiter := middleware.NewRateLimiter(cfg.Security.RateLimitPerMin)
@@ -205,6 +207,14 @@ func main() {
 			dashboard.POST("/kafka/connections/:id/start", dashboardHandler.StartKafkaConnection)
 			dashboard.POST("/kafka/connections/:id/stop", dashboardHandler.StopKafkaConnection)
 
+			dashboard.GET("/kafka/event-mappings", dashboardHandler.ListEventMappings)
+			dashboard.POST("/kafka/event-mappings", dashboardHandler.CreateEventMapping)
+			dashboard.PUT("/kafka/event-mappings/:id", dashboardHandler.UpdateEventMapping)
+			dashboard.DELETE("/kafka/event-mappings/:id", dashboardHandler.DeleteEventMapping)
+
+			dashboard.GET("/kafka/logs", dashboardHandler.ListKafkaLogs)
+			dashboard.DELETE("/kafka/logs", dashboardHandler.ClearKafkaLogs)
+
 			dashboard.GET("/roles/internal", rbacHandler.ListInternalRoles)
 			dashboard.POST("/roles/internal", rbacHandler.CreateInternalRole)
 			dashboard.PUT("/roles/internal/:id", rbacHandler.UpdateInternalRole)
@@ -219,7 +229,6 @@ func main() {
 
 			dashboard.GET("/ws", wsHandler.HandleConnection)
 		}
-
 	}
 
 	router.Static("/uploads", cfg.Storage.UploadDir)
@@ -263,10 +272,8 @@ func main() {
 
 	logger.Info("Shutting down server...")
 
-	if kafkaService != nil {
-		if err := kafkaService.Stop(); err != nil {
-			logger.WithError(err).Error("Failed to stop Kafka service")
-		}
+	if kafkaManager != nil {
+		kafkaManager.StopAll()
 	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)

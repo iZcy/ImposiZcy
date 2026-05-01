@@ -24,17 +24,49 @@ func (r *KafkaConnectionRepository) collection() *mongo.Collection {
 }
 
 type KafkaConnection struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	Name      string             `bson:"name" json:"name"`
-	Brokers   []string           `bson:"brokers" json:"brokers"`
-	Topics    []string           `bson:"topics" json:"topics"`
-	GroupID   string             `bson:"group_id" json:"group_id"`
-	Active    bool               `bson:"active" json:"active"`
-	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
-	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	Name        string             `bson:"name" json:"name"`
+	Broker      string             `bson:"broker" json:"broker"`
+	Topic       string             `bson:"topic" json:"topic"`
+	GroupID     string             `bson:"group_id" json:"group_id"`
+	ClientID    string             `bson:"client_id" json:"client_id"`
+	AutoOffset  string             `bson:"auto_offset" json:"auto_offset"`
+	Enabled     bool               `bson:"enabled" json:"enabled"`
+	Description string             `bson:"description" json:"description"`
+	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
+	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
+}
+
+type KafkaConnectionStatus struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Connected bool   `json:"connected"`
+	Enabled   bool   `json:"enabled"`
+}
+
+func NewKafkaConnection(conn *KafkaConnection) *KafkaConnection {
+	if conn.GroupID == "" {
+		conn.GroupID = "imposizcy-consumer-group"
+	}
+	if conn.ClientID == "" {
+		conn.ClientID = "imposizcy"
+	}
+	if conn.AutoOffset == "" {
+		conn.AutoOffset = "earliest"
+	}
+	return conn
 }
 
 func (r *KafkaConnectionRepository) Create(ctx context.Context, conn *KafkaConnection) error {
+	if conn.GroupID == "" {
+		conn.GroupID = "imposizcy-consumer-group"
+	}
+	if conn.ClientID == "" {
+		conn.ClientID = "imposizcy"
+	}
+	if conn.AutoOffset == "" {
+		conn.AutoOffset = "earliest"
+	}
 	conn.ID = primitive.NewObjectID()
 	conn.CreatedAt = time.Now()
 	conn.UpdatedAt = time.Now()
@@ -53,6 +85,20 @@ func (r *KafkaConnectionRepository) GetByID(ctx context.Context, id string) (*Ka
 		return nil, err
 	}
 	return &conn, nil
+}
+
+func (r *KafkaConnectionRepository) GetEnabled(ctx context.Context) ([]*KafkaConnection, error) {
+	cursor, err := r.collection().Find(ctx, bson.M{"enabled": true})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var conns []*KafkaConnection
+	if err := cursor.All(ctx, &conns); err != nil {
+		return nil, err
+	}
+	return conns, nil
 }
 
 func (r *KafkaConnectionRepository) List(ctx context.Context) ([]*KafkaConnection, error) {
@@ -86,20 +132,6 @@ func (r *KafkaConnectionRepository) Delete(ctx context.Context, id string) error
 	}
 	_, err = r.collection().DeleteOne(ctx, bson.M{"_id": objID})
 	return err
-}
-
-func (r *KafkaConnectionRepository) ListActive(ctx context.Context) ([]*KafkaConnection, error) {
-	cursor, err := r.collection().Find(ctx, bson.M{"active": true})
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	var conns []*KafkaConnection
-	if err := cursor.All(ctx, &conns); err != nil {
-		return nil, err
-	}
-	return conns, nil
 }
 
 func (r *KafkaConnectionRepository) EnsureIndexes(ctx context.Context) error {
