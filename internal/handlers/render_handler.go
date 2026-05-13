@@ -19,6 +19,7 @@ type RenderHandler struct {
 	renderJobRepo   *repositories.RenderJobRepository
 	imageOutputRepo *repositories.ImageOutputRepository
 	renderer        *services.RendererService
+	nativeRenderer  *services.NativeRenderer
 	validator       *services.ValidatorService
 	imageGenerator  *services.ImageGeneratorService
 	wsHandler       *WebSocketHandler
@@ -31,6 +32,7 @@ func NewRenderHandler(
 	renderJobRepo *repositories.RenderJobRepository,
 	imageOutputRepo *repositories.ImageOutputRepository,
 	renderer *services.RendererService,
+	nativeRenderer *services.NativeRenderer,
 	validatorSvc *services.ValidatorService,
 	imageGenerator *services.ImageGeneratorService,
 	wsHandler *WebSocketHandler,
@@ -41,12 +43,25 @@ func NewRenderHandler(
 		renderJobRepo:   renderJobRepo,
 		imageOutputRepo: imageOutputRepo,
 		renderer:        renderer,
+		nativeRenderer:  nativeRenderer,
 		validator:       validatorSvc,
 		imageGenerator:  imageGenerator,
 		wsHandler:       wsHandler,
 		validate:        validator.New(),
 		logger:          logger,
 	}
+}
+
+// useNativeRenderer returns true when the template should render via NativeRenderer.
+// Explicit RenderEngine wins; otherwise, a non-empty BackgroundImage triggers native.
+func useNativeRenderer(t *models.PrintTemplate) bool {
+	if t.RenderEngine == "native" {
+		return true
+	}
+	if t.RenderEngine == "html" {
+		return false
+	}
+	return t.BackgroundImage != ""
 }
 
 func (h *RenderHandler) Render(c *gin.Context) {
@@ -79,6 +94,28 @@ func (h *RenderHandler) Render(c *gin.Context) {
 		return
 	}
 
+	// Expand raw passthrough mode (data_row) before validation so the rest of the pipeline sees a keyed map.
+	if len(req.DataRow) > 0 {
+		if len(req.Data) > 0 {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Success: false,
+				Error:   "cannot supply both data and data_row",
+				Code:    http.StatusBadRequest,
+			})
+			return
+		}
+		expanded, err := services.ExpandDataRow(req.DataRow, template.Variables)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Success: false,
+				Error:   err.Error(),
+				Code:    http.StatusBadRequest,
+			})
+			return
+		}
+		req.Data = expanded
+	}
+
 	if template.DataSchema != "" {
 		valid, errors, err := h.validator.ValidateData(template.DataSchema, req.Data)
 		if err != nil {
@@ -106,25 +143,6 @@ func (h *RenderHandler) Render(c *gin.Context) {
 		data = services.ApplyFieldMapping(req.Data, template.FieldMapping)
 	}
 
-	// Choose rendering strategy based on template type
-	var renderedHTML string
-	if template.BackgroundImage != "" {
-		// Position-based rendering (DocuSign-style overlay on background image)
-		renderedHTML, err = h.renderer.RenderPositioned(template, data)
-	} else {
-		// HTML template rendering (classic mode)
-		renderedHTML, err = h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, data)
-	}
-	if err != nil {
-		h.logger.WithError(err).Error("Failed to render template")
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
-			Success: false,
-			Error:   "Failed to render template: " + err.Error(),
-			Code:    http.StatusInternalServerError,
-		})
-		return
-	}
-
 	outputFormat := req.OutputFormat
 	if outputFormat == "" {
 		outputFormat = string(template.OutputFormat)
@@ -142,21 +160,50 @@ func (h *RenderHandler) Render(c *gin.Context) {
 		height = req.Height
 	}
 
-	imgBytes, err := h.imageGenerator.GenerateFromHTML(c.Request.Context(), renderedHTML, &models.RenderOptions{
-		Width:   width,
-		Height:  height,
-		DPI:     template.DPI,
-		Format:  outputFormat,
-		Quality: template.Quality,
-	})
-	if err != nil {
-		h.logger.WithError(err).Error("Failed to generate image")
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
-			Success: false,
-			Error:   "Failed to generate image: " + err.Error(),
-			Code:    http.StatusInternalServerError,
+	var imgBytes []byte
+	if useNativeRenderer(template) && h.nativeRenderer != nil {
+		imgBytes, err = h.nativeRenderer.Render(c.Request.Context(), template, data, outputFormat, template.Quality)
+		if err != nil {
+			h.logger.WithError(err).Error("Native renderer failed")
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Success: false,
+				Error:   "Failed to render template: " + err.Error(),
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+	} else {
+		var renderedHTML string
+		if template.BackgroundImage != "" {
+			renderedHTML, err = h.renderer.RenderPositioned(template, data)
+		} else {
+			renderedHTML, err = h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, data)
+		}
+		if err != nil {
+			h.logger.WithError(err).Error("Failed to render template")
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Success: false,
+				Error:   "Failed to render template: " + err.Error(),
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
+		imgBytes, err = h.imageGenerator.GenerateFromHTML(c.Request.Context(), renderedHTML, &models.RenderOptions{
+			Width:   width,
+			Height:  height,
+			DPI:     template.DPI,
+			Format:  outputFormat,
+			Quality: template.Quality,
 		})
-		return
+		if err != nil {
+			h.logger.WithError(err).Error("Failed to generate image")
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Success: false,
+				Error:   "Failed to generate image: " + err.Error(),
+				Code:    http.StatusInternalServerError,
+			})
+			return
+		}
 	}
 
 	now := time.Now()
@@ -243,6 +290,27 @@ func (h *RenderHandler) RenderAsync(c *gin.Context) {
 		return
 	}
 
+	if len(req.DataRow) > 0 {
+		if len(req.Data) > 0 {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Success: false,
+				Error:   "cannot supply both data and data_row",
+				Code:    http.StatusBadRequest,
+			})
+			return
+		}
+		expanded, err := services.ExpandDataRow(req.DataRow, template.Variables)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Success: false,
+				Error:   err.Error(),
+				Code:    http.StatusBadRequest,
+			})
+			return
+		}
+		req.Data = expanded
+	}
+
 	outputFormat := req.OutputFormat
 	if outputFormat == "" {
 		outputFormat = string(template.OutputFormat)
@@ -310,32 +378,42 @@ func (h *RenderHandler) processJobAsync(job *models.RenderJob, template *models.
 		data = services.ApplyFieldMapping(job.Data, template.FieldMapping)
 	}
 
-	var renderedHTML string
+	var imgBytes []byte
 	var err error
-	if template.BackgroundImage != "" {
-		renderedHTML, err = h.renderer.RenderPositioned(template, data)
+	if useNativeRenderer(template) && h.nativeRenderer != nil {
+		imgBytes, err = h.nativeRenderer.Render(context.Background(), template, data, string(job.OutputFormat), template.Quality)
+		if err != nil {
+			job.Status = models.RenderStatusFailed
+			job.Error = err.Error()
+			_ = h.renderJobRepo.Update(context.Background(), job)
+			return
+		}
 	} else {
-		renderedHTML, err = h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, data)
-	}
-	if err != nil {
-		job.Status = models.RenderStatusFailed
-		job.Error = err.Error()
-		_ = h.renderJobRepo.Update(context.Background(), job)
-		return
-	}
-
-	imgBytes, err := h.imageGenerator.GenerateFromHTML(context.Background(), renderedHTML, &models.RenderOptions{
-		Width:   job.Width,
-		Height:  job.Height,
-		DPI:     template.DPI,
-		Format:  string(job.OutputFormat),
-		Quality: template.Quality,
-	})
-	if err != nil {
-		job.Status = models.RenderStatusFailed
-		job.Error = err.Error()
-		_ = h.renderJobRepo.Update(context.Background(), job)
-		return
+		var renderedHTML string
+		if template.BackgroundImage != "" {
+			renderedHTML, err = h.renderer.RenderPositioned(template, data)
+		} else {
+			renderedHTML, err = h.renderer.RenderHTML(template.HTML, template.CSS, template.Variables, data)
+		}
+		if err != nil {
+			job.Status = models.RenderStatusFailed
+			job.Error = err.Error()
+			_ = h.renderJobRepo.Update(context.Background(), job)
+			return
+		}
+		imgBytes, err = h.imageGenerator.GenerateFromHTML(context.Background(), renderedHTML, &models.RenderOptions{
+			Width:   job.Width,
+			Height:  job.Height,
+			DPI:     template.DPI,
+			Format:  string(job.OutputFormat),
+			Quality: template.Quality,
+		})
+		if err != nil {
+			job.Status = models.RenderStatusFailed
+			job.Error = err.Error()
+			_ = h.renderJobRepo.Update(context.Background(), job)
+			return
+		}
 	}
 
 	now := time.Now()

@@ -21,7 +21,7 @@ func NewUploadService(cfg *config.Config, logger *logrus.Logger) *UploadService 
 	return &UploadService{cfg: cfg, logger: logger}
 }
 
-// allowedExtensions defines permitted image file types
+// allowedExtensions defines permitted image file types for image subdirs.
 var allowedExtensions = map[string]bool{
 	".png":  true,
 	".jpg":  true,
@@ -32,12 +32,22 @@ var allowedExtensions = map[string]bool{
 	".svg":  true,
 }
 
+// allowedFontExtensions are accepted only when subDir is "fonts".
+var allowedFontExtensions = map[string]bool{
+	".ttf": true,
+	".otf": true,
+}
+
 // SaveUpload saves an uploaded file to the upload directory.
 // Returns the relative path (for DB storage) and the full filesystem path.
 func (s *UploadService) SaveUpload(file *multipart.FileHeader, subDir string) (relativePath string, fullPath string, err error) {
 	ext := strings.ToLower(filepath.Ext(file.Filename))
-	if !allowedExtensions[ext] {
-		return "", "", fmt.Errorf("file type %s not allowed. permitted: png, jpg, jpeg, gif, bmp, webp, svg", ext)
+	allowed := allowedExtensions[ext]
+	if !allowed && subDir == "fonts" {
+		allowed = allowedFontExtensions[ext]
+	}
+	if !allowed {
+		return "", "", fmt.Errorf("file type %s not allowed for subdir %q", ext, subDir)
 	}
 
 	// Check file size

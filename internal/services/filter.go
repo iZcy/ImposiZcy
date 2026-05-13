@@ -112,7 +112,7 @@ func compareNumeric(cond models.FilterCondition, val interface{}) (bool, string)
 			passed = valNum <= condNum
 		}
 		if !passed {
-			return false, fmt.Sprintf("field '%s' = %v, expected %s %s", cond.Field, valNum, cond.Operator, condNum)
+			return false, fmt.Sprintf("field '%s' = %v, expected %s %v", cond.Field, valNum, cond.Operator, condNum)
 		}
 		return true, ""
 	}

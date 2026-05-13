@@ -61,6 +61,8 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 		Variables:       req.Variables,
 		FieldMapping:    req.FieldMapping,
 		BackgroundImage: func() string { if req.BackgroundImage != nil { return *req.BackgroundImage }; return "" }(),
+		RenderEngine:    req.RenderEngine,
+		DefaultFont:     req.DefaultFont,
 		Width:           req.Width,
 		Height:          req.Height,
 		DimensionUnit:   req.DimensionUnit,
@@ -69,6 +71,9 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 		Quality:         req.Quality,
 		Tags:            req.Tags,
 		IsActive:        isActive,
+	}
+	if template.RenderEngine == "" && template.BackgroundImage != "" {
+		template.RenderEngine = "native"
 	}
 
 	if err := h.templateRepo.Create(c.Request.Context(), template); err != nil {
@@ -210,6 +215,12 @@ func (h *TemplateHandler) Update(c *gin.Context) {
 	}
 	if req.FieldMapping != nil {
 		template.FieldMapping = req.FieldMapping
+	}
+	if req.RenderEngine != nil {
+		template.RenderEngine = *req.RenderEngine
+	}
+	if req.DefaultFont != nil {
+		template.DefaultFont = *req.DefaultFont
 	}
 
 	if err := h.templateRepo.Update(c.Request.Context(), template); err != nil {

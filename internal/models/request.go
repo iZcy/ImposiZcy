@@ -2,7 +2,8 @@ package models
 
 type RenderRequest struct {
 	TemplateSlug string                 `json:"template_slug" validate:"required"`
-	Data         map[string]interface{} `json:"data"`
+	Data         map[string]interface{} `json:"data,omitempty"`
+	DataRow      []interface{}          `json:"data_row,omitempty"` // Positional values, mapped to Variables sorted by OrderIndex
 	OutputFormat string                 `json:"output_format,omitempty"`
 	Mode         string                 `json:"mode,omitempty"`
 	Width        int                    `json:"width,omitempty"`
@@ -54,6 +55,8 @@ type CreateTemplateRequest struct {
 	IsActive       *bool              `json:"is_active,omitempty"`
 	BackgroundImage *string           `json:"background_image,omitempty"`
 	FieldMapping   []FieldMapping     `json:"field_mapping,omitempty"`
+	RenderEngine   string             `json:"render_engine,omitempty"`
+	DefaultFont    string             `json:"default_font,omitempty"`
 }
 
 type UpdateTemplateRequest struct {
@@ -73,6 +76,8 @@ type UpdateTemplateRequest struct {
 	Quality        *int               `json:"quality,omitempty"`
 	Tags           []Tag              `json:"tags,omitempty"`
 	IsActive       *bool              `json:"is_active,omitempty"`
+	RenderEngine   *string            `json:"render_engine,omitempty"`
+	DefaultFont    *string            `json:"default_font,omitempty"`
 }
 
 type ErrorResponse struct {

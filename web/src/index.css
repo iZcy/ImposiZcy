@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary-color: var(--primary);
+  --success-color: var(--success);
+  --danger-color: var(--danger);
+  --warning-color: var(--warning);
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--bg-card);
+  --bg-tertiary: var(--bg-hover);
+  --text-primary: var(--text);
+  --text-secondary: var(--text-muted);
+  --text-muted: var(--text-muted);
+  --border-color: var(--border);
+  --border-light: var(--border);
+  --card-bg: var(--bg-card);
+  --hover-bg: var(--bg-hover);
+  --input-bg: var(--bg-input);
+  --input-border: var(--border);
+  --badge-success-bg: rgba(46, 204, 113, 0.15);
+  --badge-success-color: var(--success);
+  --badge-danger-bg: rgba(233, 69, 96, 0.15);
+  --badge-danger-color: var(--danger);
+  --badge-warning-bg: rgba(243, 156, 18, 0.15);
+  --badge-warning-color: var(--warning);
+  --badge-info-bg: rgba(86, 150, 233, 0.15);
+  --badge-info-color: var(--primary);
+}
+
+#toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

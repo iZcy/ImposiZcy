@@ -79,6 +79,13 @@ func main() {
 	kafkaConnRepo := repositories.NewKafkaConnectionRepository(db)
 	eventMappingRepo := repositories.NewEventMappingRepository(db)
 	kafkaLogRepo := repositories.NewKafkaLogRepository(db)
+	fontRepo := repositories.NewFontRepository(db)
+
+	idxCtx, idxCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := fontRepo.EnsureIndexes(idxCtx); err != nil {
+		logger.WithError(err).Warn("Failed to ensure font indexes")
+	}
+	idxCancel()
 
 	barcodeService := services.NewBarcodeService()
 	rendererService := services.NewRendererService(logger, barcodeService, cfg.Storage.UploadDir)
@@ -88,6 +95,11 @@ func main() {
 	if err := uploadService.EnsureUploadDir(); err != nil {
 		logger.WithError(err).Fatal("Failed to create upload directory")
 	}
+	fontRegistry, err := services.NewFontRegistry(fontRepo, cfg.Storage.UploadDir, logger)
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to initialize font registry")
+	}
+	nativeRenderer := services.NewNativeRenderer(logger, fontRegistry, barcodeService, cfg.Storage.UploadDir)
 
 	var wsHandler *handlers.WebSocketHandler
 	if cfg.Dashboard.Enabled {
@@ -97,11 +109,12 @@ func main() {
 	templateHandler := handlers.NewTemplateHandler(templateRepo, logger)
 	renderHandler := handlers.NewRenderHandler(
 		templateRepo, renderJobRepo, imageOutputRepo,
-		rendererService, validatorService, imageGenerator,
+		rendererService, nativeRenderer, validatorService, imageGenerator,
 		wsHandler, logger,
 	)
 	imageHandler := handlers.NewImageHandler(imageOutputRepo, logger)
 	uploadHandler := handlers.NewUploadHandler(uploadService, cfg, logger)
+	fontHandler := handlers.NewFontHandler(fontRepo, uploadService, fontRegistry, logger)
 
 	var dashboardHandler *handlers.DashboardHandler
 	var rbacHandler *handlers.RBACHandler
@@ -177,6 +190,10 @@ func main() {
 
 		v1.POST("/upload/background", uploadHandler.UploadBackground)
 		v1.POST("/upload/asset", uploadHandler.UploadTemplateAsset)
+
+		v1.POST("/fonts", fontHandler.Upload)
+		v1.GET("/fonts", fontHandler.List)
+		v1.DELETE("/fonts/:id", fontHandler.Delete)
 	}
 
 	if cfg.Dashboard.Enabled {
@@ -190,6 +207,10 @@ func main() {
 			dashboard.POST("/templates", dashboardHandler.CreateTemplate)
 			dashboard.PUT("/templates/:id", dashboardHandler.UpdateTemplate)
 			dashboard.DELETE("/templates/:id", dashboardHandler.DeleteTemplate)
+
+			dashboard.POST("/fonts", fontHandler.Upload)
+			dashboard.GET("/fonts", fontHandler.List)
+			dashboard.DELETE("/fonts/:id", fontHandler.Delete)
 
 			dashboard.GET("/render-jobs", dashboardHandler.ListRenderJobs)
 			dashboard.GET("/render-jobs/:id", dashboardHandler.GetRenderJob)

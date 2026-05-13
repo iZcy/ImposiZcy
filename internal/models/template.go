@@ -91,6 +91,8 @@ type TemplateVariable struct {
 	FontWeight  string         `bson:"font_weight,omitempty" json:"font_weight,omitempty"`   // "normal" or "bold"
 	TextAlign   string         `bson:"text_align,omitempty" json:"text_align,omitempty"`     // "left", "center", "right"
 	SourceField string         `bson:"source_field,omitempty" json:"source_field,omitempty"` // Maps external field name to this variable
+	FontFamily  string         `bson:"font_family,omitempty" json:"font_family,omitempty"`   // Family name registered in FontRegistry; empty = template default or fallback
+	OrderIndex  int            `bson:"order_index,omitempty" json:"order_index,omitempty"`   // Ordinal for raw-passthrough data_row mapping
 }
 
 type PrintTemplate struct {
@@ -104,6 +106,8 @@ type PrintTemplate struct {
 	Variables       []TemplateVariable `bson:"variables,omitempty" json:"variables,omitempty"`
 	FieldMapping    []FieldMapping     `bson:"field_mapping,omitempty" json:"field_mapping,omitempty"`
 	BackgroundImage string             `bson:"background_image,omitempty" json:"background_image,omitempty"`
+	RenderEngine    string             `bson:"render_engine,omitempty" json:"render_engine,omitempty"` // "" | "html" | "native". Lazy default: "native" when BackgroundImage != ""
+	DefaultFont     string             `bson:"default_font,omitempty" json:"default_font,omitempty"`   // Fallback font family for variables without FontFamily
 	Width           float64            `bson:"width" json:"width" validate:"required"`
 	Height          float64            `bson:"height" json:"height" validate:"required"`
 	DimensionUnit   DimensionUnit      `bson:"dimension_unit,omitempty" json:"dimension_unit,omitempty"`

@@ -29,6 +29,9 @@ Thumbs.db
 /bin/
 /tmp/
 
+# Runtime data (generated images, uploads)
+/data/
+
 # Node (for web/dashboard)
 node_modules/
 dist/

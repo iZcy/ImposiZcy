@@ -275,7 +275,7 @@ func (s *RendererService) buildVariableOverlay(v models.TemplateVariable, value 
 	}
 
 	return fmt.Sprintf(
-		`<div class="field-overlay %s" style="left:%gpx;top:%gpx;width:%gpx;height:%gpx;font-size:%dpx;align-items:center;justify-content:%s;color:%s;">%s</div>`+"\n",
+		`<div class="field-overlay %s" style="left:%gpx;top:%gpx;width:%gpx;height:%gpx;font-size:%gpx;align-items:center;justify-content:%s;color:%s;">%s</div>`+"\n",
 		cssClass, x, y, w, h, fontSize, flexAlign, pos.Color, content,
 	)
 }
