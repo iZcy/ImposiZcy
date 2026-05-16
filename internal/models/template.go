@@ -42,6 +42,15 @@ const (
 	VariableTypeText    TemplateVariableType = "text"
 	VariableTypeBarcode TemplateVariableType = "barcode"
 	VariableTypeImage   TemplateVariableType = "image"
+	VariableTypeShape   TemplateVariableType = "shape"
+)
+
+type ShapeKind string
+
+const (
+	ShapeRect    ShapeKind = "rect"
+	ShapeLine    ShapeKind = "line"
+	ShapeEllipse ShapeKind = "ellipse"
 )
 
 type BarcodeFormat string
@@ -93,6 +102,11 @@ type TemplateVariable struct {
 	SourceField string         `bson:"source_field,omitempty" json:"source_field,omitempty"` // Maps external field name to this variable
 	FontFamily  string         `bson:"font_family,omitempty" json:"font_family,omitempty"`   // Family name registered in FontRegistry; empty = template default or fallback
 	OrderIndex  int            `bson:"order_index,omitempty" json:"order_index,omitempty"`   // Ordinal for raw-passthrough data_row mapping
+	// Shape primitives (when Type == "shape")
+	Shape       ShapeKind `bson:"shape,omitempty" json:"shape,omitempty"`               // rect | line | ellipse
+	Fill        string    `bson:"fill,omitempty" json:"fill,omitempty"`                 // Hex color, "" or "none" = no fill
+	Stroke      string    `bson:"stroke,omitempty" json:"stroke,omitempty"`             // Hex color, "" = no stroke
+	StrokeWidth float64   `bson:"stroke_width,omitempty" json:"stroke_width,omitempty"` // px (default 1)
 }
 
 type PrintTemplate struct {

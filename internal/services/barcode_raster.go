@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/boombuler/barcode"
+	"github.com/boombuler/barcode/code128"
 	"github.com/fogleman/gg"
 	"github.com/golang/freetype/truetype"
 	"golang.org/x/image/font"
@@ -28,20 +30,24 @@ func (s *BarcodeService) RasterizePNG(content, format string, width, height int)
 	case "qr":
 		return s.rasterQR(content, width, height)
 	case "code128", "":
-		bars, err := encodeCode128(content)
+		code, err := code128.Encode(content)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("code128 encode: %w", err)
 		}
-		return s.barsToImage(bars, width, height, content), nil
+		scaled, err := barcode.Scale(code, width, height)
+		if err != nil {
+			return nil, fmt.Errorf("code128 scale: %w", err)
+		}
+		return scaled, nil
 	case "ean13":
 		bars := buildEAN13Bars(content)
-		return s.barsToImage(bars, width, height, ean13Digits(content)), nil
+		return s.barsToImage(bars, width, height, ""), nil
 	case "code39":
 		if content == "" {
 			return nil, fmt.Errorf("Code 39 content cannot be empty")
 		}
 		bars := buildCode39Bars(content)
-		return s.barsToImage(bars, width, height, content), nil
+		return s.barsToImage(bars, width, height, ""), nil
 	default:
 		return nil, fmt.Errorf("unsupported barcode format %q", format)
 	}
@@ -74,10 +80,11 @@ func (s *BarcodeService) barsToImage(bars []int, width, height int, label string
 	if unit < 1 {
 		unit = 1
 	}
-	barRect := image.Rect(0, 0, 1, height-20)
-	if height-20 <= 0 {
-		barRect = image.Rect(0, 0, 1, height)
+	footer := 20
+	if label == "" || height-footer <= 0 {
+		footer = 0
 	}
+	barRect := image.Rect(0, 0, 1, height-footer)
 	black := &image.Uniform{C: color.Black}
 
 	x := 0.0

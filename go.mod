@@ -22,11 +22,14 @@ require (
 )
 
 require (
+	github.com/boombuler/barcode v1.1.0 // indirect
 	github.com/chai2010/webp v1.4.0 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/makiuchi-d/gozxing v0.1.1 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )
 
 require (

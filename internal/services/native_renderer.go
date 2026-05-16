@@ -15,6 +15,9 @@ import (
 	"github.com/chai2010/webp"
 	"github.com/fogleman/gg"
 	"github.com/iZcy/imposizcy/internal/models"
+	"github.com/makiuchi-d/gozxing"
+	gzcode128 "github.com/makiuchi-d/gozxing/oned"
+	gzqr "github.com/makiuchi-d/gozxing/qrcode"
 	"github.com/sirupsen/logrus"
 )
 
@@ -50,6 +53,13 @@ func (r *NativeRenderer) Render(ctx context.Context, t *models.PrintTemplate, da
 
 	vars := orderedVariables(t.Variables)
 	for _, v := range vars {
+		// Shapes are static decoration and don't need a data value.
+		if v.Type == models.VariableTypeShape {
+			if err := r.drawShape(dc, v); err != nil {
+				r.logger.WithError(err).WithField("variable", v.Name).Warn("shape draw failed")
+			}
+			continue
+		}
 		raw := resolveValue(v, data)
 		if raw == "" {
 			continue
@@ -70,7 +80,61 @@ func (r *NativeRenderer) Render(ctx context.Context, t *models.PrintTemplate, da
 		}
 	}
 
+	if err := r.verifyBarcodes(dc.Image(), vars, data); err != nil {
+		return nil, err
+	}
+
 	return encodeImage(dc.Image(), format, quality)
+}
+
+// verifyBarcodes re-scans every barcode / QR variable from the freshly rendered canvas at its
+// position bbox and asserts the decoded payload matches the source value. Guarantees that the
+// emitted image is actually machine-readable and carries the right data — protects against silent
+// encoder/format/size regressions.
+func (r *NativeRenderer) verifyBarcodes(img image.Image, vars []models.TemplateVariable, data map[string]interface{}) error {
+	type cropper interface {
+		SubImage(image.Rectangle) image.Image
+	}
+	sub, ok := img.(cropper)
+	if !ok {
+		return nil
+	}
+	for _, v := range vars {
+		if v.Type != models.VariableTypeBarcode || v.Position == nil {
+			continue
+		}
+		want := resolveValue(v, data)
+		if want == "" {
+			continue
+		}
+		rect := image.Rect(int(v.Position.X), int(v.Position.Y),
+			int(v.Position.X+v.Position.Width), int(v.Position.Y+v.Position.Height))
+		region := sub.SubImage(rect)
+		bmp, err := gozxing.NewBinaryBitmapFromImage(region)
+		if err != nil {
+			return fmt.Errorf("verify %q: bitmap: %w", v.Name, err)
+		}
+		var reader gozxing.Reader
+		if v.BarcodeFormat == models.BarcodeFormatQR {
+			reader = gzqr.NewQRCodeReader()
+		} else {
+			reader = gzcode128.NewCode128Reader()
+		}
+		result, err := reader.Decode(bmp, nil)
+		if err != nil {
+			return fmt.Errorf("verify %q (%s): cannot re-scan rendered barcode: %w", v.Name, v.BarcodeFormat, err)
+		}
+		got := result.GetText()
+		if got != want {
+			return fmt.Errorf("verify %q (%s): rendered payload %q != expected %q", v.Name, v.BarcodeFormat, got, want)
+		}
+		r.logger.WithFields(logrus.Fields{
+			"variable": v.Name,
+			"format":   v.BarcodeFormat,
+			"payload":  got,
+		}).Debug("barcode round-trip verified")
+	}
+	return nil
 }
 
 func (r *NativeRenderer) drawText(ctx context.Context, dc *gg.Context, t *models.PrintTemplate, v models.TemplateVariable, value string) error {
@@ -171,6 +235,55 @@ func (r *NativeRenderer) drawBarcode(dc *gg.Context, v models.TemplateVariable, 
 	return nil
 }
 
+// drawShape renders a primitive (rect, line, ellipse) at v.Position with optional fill + stroke.
+// For "line", (X,Y)..(X+Width,Y+Height) is the segment; Fill is ignored.
+func (r *NativeRenderer) drawShape(dc *gg.Context, v models.TemplateVariable) error {
+	pos := v.Position
+	if pos == nil {
+		return fmt.Errorf("shape %q has no position", v.Name)
+	}
+	kind := v.Shape
+	if kind == "" {
+		kind = models.ShapeRect
+	}
+	switch kind {
+	case models.ShapeLine:
+		dc.DrawLine(pos.X, pos.Y, pos.X+pos.Width, pos.Y+pos.Height)
+	case models.ShapeEllipse:
+		dc.DrawEllipse(pos.X+pos.Width/2, pos.Y+pos.Height/2, pos.Width/2, pos.Height/2)
+	default: // rect
+		dc.DrawRectangle(pos.X, pos.Y, pos.Width, pos.Height)
+	}
+	hasFill := v.Fill != "" && !strings.EqualFold(v.Fill, "none") && kind != models.ShapeLine
+	hasStroke := v.Stroke != "" && !strings.EqualFold(v.Stroke, "none")
+	if hasFill && hasStroke {
+		dc.SetHexColor(v.Fill)
+		dc.FillPreserve()
+		sw := v.StrokeWidth
+		if sw <= 0 {
+			sw = 1
+		}
+		dc.SetLineWidth(sw)
+		dc.SetHexColor(v.Stroke)
+		dc.Stroke()
+	} else if hasFill {
+		dc.SetHexColor(v.Fill)
+		dc.Fill()
+	} else if hasStroke {
+		sw := v.StrokeWidth
+		if sw <= 0 {
+			sw = 1
+		}
+		dc.SetLineWidth(sw)
+		dc.SetHexColor(v.Stroke)
+		dc.Stroke()
+	} else {
+		// nothing specified — clear the path so it doesn't get filled later
+		dc.ClearPath()
+	}
+	return nil
+}
+
 func (r *NativeRenderer) drawImage(dc *gg.Context, v models.TemplateVariable, value string) error {
 	pos := v.Position
 	if pos == nil {
@@ -220,14 +333,24 @@ func orderedVariables(in []models.TemplateVariable) []models.TemplateVariable {
 }
 
 func resolveValue(v models.TemplateVariable, data map[string]interface{}) string {
-	val, ok := data[v.Name]
-	if !ok || val == nil {
-		return v.DefaultValue
+	keys := []string{v.Name}
+	if v.SourceField != "" && v.SourceField != v.Name {
+		keys = append([]string{v.SourceField}, keys...)
 	}
-	if s, ok := val.(string); ok {
-		return s
+	for _, k := range keys {
+		val, ok := data[k]
+		if !ok || val == nil {
+			continue
+		}
+		if s, ok := val.(string); ok {
+			if s != "" {
+				return s
+			}
+			continue
+		}
+		return fmt.Sprintf("%v", val)
 	}
-	return fmt.Sprintf("%v", val)
+	return v.DefaultValue
 }
 
 func encodeImage(img image.Image, format string, quality int) ([]byte, error) {
