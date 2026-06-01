@@ -1,41 +1,31 @@
-FROM golang:1.26-alpine AS builder
-
-ENV GOTOOLCHAIN=auto
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
 
 RUN apk add --no-cache git gcc musl-dev
 
-WORKDIR /build
+ARG GITHUB_TOKEN
+RUN if [ -n "$GITHUB_TOKEN" ]; then \
+      git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
+    fi
+ENV GOPRIVATE="github.com/KreaZcy/*,github.com/iZcy/*"
 
-COPY libs/kzcy-config/go.mod /build/libs/kzcy-config/go.mod
-COPY libs/kzcy-dashboard/go.mod /build/libs/kzcy-dashboard/go.mod
-COPY services/ImposiZcy/ImposiZcy/go.mod /build/services/ImposiZcy/ImposiZcy/go.mod
-COPY services/ImposiZcy/ImposiZcy/go.sum /build/services/ImposiZcy/ImposiZcy/go.sum
-
-COPY go.work /build/go.work
-
-WORKDIR /build/services/ImposiZcy/ImposiZcy
-
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY libs/kzcy-config/ /build/libs/kzcy-config/
-COPY libs/kzcy-dashboard/ /build/libs/kzcy-dashboard/
-COPY services/ImposiZcy/ImposiZcy/ /build/services/ImposiZcy/ImposiZcy/
+COPY . .
+RUN CGO_ENABLED=1 GOOS=linux go build -o imposizcy-server ./cmd/server
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o imposizcy-server ./cmd/server
-
-FROM alpine:latest
-
+FROM alpine:3.19
 RUN apk add --no-cache ca-certificates tzdata chromium
-
 WORKDIR /app
 
 ENV TZ=Asia/Jakarta
 ENV GIN_MODE=release
 ENV CHROME_PATH=/usr/bin/chromium-browser
 
-COPY --from=builder /build/services/ImposiZcy/ImposiZcy/imposizcy-server .
-COPY --from=builder /build/services/ImposiZcy/ImposiZcy/templates/ ./templates/
-COPY --from=builder /build/services/ImposiZcy/ImposiZcy/public/ ./public/
+COPY --from=builder /app/imposizcy-server .
+COPY templates/ ./templates/
+COPY public/ ./public/
 
 RUN chmod +x ./imposizcy-server
 

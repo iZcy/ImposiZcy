@@ -65,6 +65,25 @@ func (r *PrinterRepository) List(ctx context.Context, page, limit int64) ([]*mod
 	return items, nil
 }
 
+func (r *PrinterRepository) ListByTenantID(ctx context.Context, tenantID string, page, limit int64) ([]*models.Printer, error) {
+	skip := (page - 1) * limit
+	opts := options.Find().SetSkip(skip).SetLimit(limit).SetSort(bson.M{"created_at": -1})
+	filter := bson.M{"is_active": true}
+	if tenantID != "" {
+		filter["tenant_id"] = tenantID
+	}
+	cursor, err := r.collection().Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	var items []*models.Printer
+	if err := cursor.All(ctx, &items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *PrinterRepository) Update(ctx context.Context, p *models.Printer) error {
 	p.UpdatedAt = time.Now()
 	_, err := r.collection().ReplaceOne(ctx, bson.M{"_id": p.ID}, p)

@@ -39,6 +39,7 @@ func (h *PrinterHandler) Create(c *gin.Context) {
 	}
 
 	printer := &models.Printer{
+		TenantID:   req.TenantID,
 		Name:       req.Name,
 		Location:   req.Location,
 		CupsName:   req.CupsName,
@@ -56,7 +57,8 @@ func (h *PrinterHandler) Create(c *gin.Context) {
 }
 
 func (h *PrinterHandler) List(c *gin.Context) {
-	items, err := h.repo.List(c.Request.Context(), 1, 100)
+	tenantID := c.Query("tenant_id")
+	items, err := h.repo.ListByTenantID(c.Request.Context(), tenantID, 1, 100)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to list printers")
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Success: false, Error: "Failed to list printers", Code: http.StatusInternalServerError})

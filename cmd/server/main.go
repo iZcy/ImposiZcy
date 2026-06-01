@@ -80,6 +80,8 @@ func main() {
 	eventMappingRepo := repositories.NewEventMappingRepository(db)
 	kafkaLogRepo := repositories.NewKafkaLogRepository(db)
 	fontRepo := repositories.NewFontRepository(db)
+	printerRepo := repositories.NewPrinterRepository(db)
+	printJobRepo := repositories.NewPrintJobRepository(db)
 
 	idxCtx, idxCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	if err := fontRepo.EnsureIndexes(idxCtx); err != nil {
@@ -101,6 +103,13 @@ func main() {
 	}
 	nativeRenderer := services.NewNativeRenderer(logger, fontRegistry, barcodeService, cfg.Storage.UploadDir)
 
+	cupsService := services.NewCUPSService(logger)
+	if cupsService.Available() {
+		logger.Info("CUPS printing service available")
+	} else {
+		logger.Warn("CUPS printing service not available — print jobs will fail")
+	}
+
 	var wsHandler *handlers.WebSocketHandler
 	if cfg.Dashboard.Enabled {
 		wsHandler = handlers.NewWebSocketHandler(logger)
@@ -115,6 +124,8 @@ func main() {
 	imageHandler := handlers.NewImageHandler(imageOutputRepo, logger)
 	uploadHandler := handlers.NewUploadHandler(uploadService, cfg, logger)
 	fontHandler := handlers.NewFontHandler(fontRepo, uploadService, fontRegistry, logger)
+	printerHandler := handlers.NewPrinterHandler(printerRepo, cupsService, logger)
+	printJobHandler := handlers.NewPrintJobHandler(printJobRepo, printerRepo, cupsService, logger)
 
 	var dashboardHandler *handlers.DashboardHandler
 	var rbacHandler *handlers.RBACHandler
@@ -194,6 +205,20 @@ func main() {
 		v1.POST("/fonts", fontHandler.Upload)
 		v1.GET("/fonts", fontHandler.List)
 		v1.DELETE("/fonts/:id", fontHandler.Delete)
+
+		v1.POST("/printers", printerHandler.Create)
+		v1.GET("/printers", printerHandler.List)
+		v1.GET("/printers/discover", printerHandler.Discover)
+		v1.GET("/printers/:id", printerHandler.GetByID)
+		v1.GET("/printers/:id/status", printerHandler.GetStatus)
+		v1.PUT("/printers/:id", printerHandler.Update)
+		v1.DELETE("/printers/:id", printerHandler.Delete)
+
+		v1.POST("/print-jobs", printJobHandler.Create)
+		v1.GET("/print-jobs", printJobHandler.List)
+		v1.GET("/print-jobs/:id", printJobHandler.GetByID)
+		v1.PUT("/print-jobs/:id/status", printJobHandler.UpdateStatus)
+		v1.DELETE("/print-jobs/:id", printJobHandler.Delete)
 	}
 
 	if cfg.Dashboard.Enabled {

@@ -17,6 +17,7 @@ const (
 
 type Printer struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	TenantID   string             `bson:"tenant_id" json:"tenant_id"`
 	Name       string             `bson:"name" json:"name" validate:"required"`
 	Location   string             `bson:"location" json:"location"`
 	CupsName   string             `bson:"cups_name" json:"cups_name" validate:"required"`
@@ -29,6 +30,7 @@ type Printer struct {
 }
 
 type CreatePrinterRequest struct {
+	TenantID   string   `json:"tenant_id,omitempty"`
 	Name       string   `json:"name" validate:"required"`
 	Location   string   `json:"location,omitempty"`
 	CupsName   string   `json:"cups_name" validate:"required"`

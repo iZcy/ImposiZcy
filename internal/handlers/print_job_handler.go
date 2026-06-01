@@ -57,6 +57,7 @@ func (h *PrintJobHandler) Create(c *gin.Context) {
 	}
 
 	pj := &models.PrintJob{
+		TenantID:    req.TenantID,
 		OrderID:     req.OrderID,
 		PrinterID:   req.PrinterID,
 		FileURL:     req.FileURL,

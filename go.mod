@@ -6,6 +6,8 @@ require (
 	github.com/IBM/sarama v1.42.1
 	github.com/KreaZcy/kzcy-config v1.0.0
 	github.com/KreaZcy/kzcy-dashboard v1.0.0
+	github.com/boombuler/barcode v1.1.0
+	github.com/chai2010/webp v1.4.0
 	github.com/chromedp/cdproto v0.0.0-20231011050154-1d073bb38998
 	github.com/fogleman/gg v1.3.0
 	github.com/gin-gonic/gin v1.9.1
@@ -14,6 +16,7 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/google/uuid v1.5.0
 	github.com/gorilla/websocket v1.5.1
+	github.com/makiuchi-d/gozxing v0.1.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.mongodb.org/mongo-driver v1.12.1
@@ -22,12 +25,9 @@ require (
 )
 
 require (
-	github.com/boombuler/barcode v1.1.0 // indirect
-	github.com/chai2010/webp v1.4.0 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/makiuchi-d/gozxing v0.1.1 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )
@@ -86,7 +86,3 @@ require (
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/KreaZcy/kzcy-config => ../../../libs/kzcy-config
-
-replace github.com/KreaZcy/kzcy-dashboard => ../../../libs/kzcy-dashboard

@@ -18,6 +18,7 @@ const (
 
 type PrintJob struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	TenantID    string             `bson:"tenant_id" json:"tenant_id"`
 	OrderID     string             `bson:"order_id" json:"order_id" validate:"required"`
 	PrinterID   string             `bson:"printer_id" json:"printer_id" validate:"required"`
 	FileURL     string             `bson:"file_url" json:"file_url"`
@@ -37,6 +38,7 @@ type PrintJob struct {
 }
 
 type CreatePrintJobRequest struct {
+	TenantID    string `json:"tenant_id,omitempty"`
 	OrderID     string `json:"order_id" validate:"required"`
 	PrinterID   string `json:"printer_id" validate:"required"`
 	FileURL     string `json:"file_url,omitempty"`
