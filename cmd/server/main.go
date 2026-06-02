@@ -125,7 +125,7 @@ func main() {
 	uploadHandler := handlers.NewUploadHandler(uploadService, cfg, logger)
 	fontHandler := handlers.NewFontHandler(fontRepo, uploadService, fontRegistry, logger)
 	printerHandler := handlers.NewPrinterHandler(printerRepo, cupsService, logger)
-	printJobHandler := handlers.NewPrintJobHandler(printJobRepo, printerRepo, cupsService, logger)
+	printJobHandler := handlers.NewPrintJobHandler(printJobRepo, printerRepo, cupsService, wsHandler, logger)
 
 	var dashboardHandler *handlers.DashboardHandler
 	var rbacHandler *handlers.RBACHandler
@@ -180,7 +180,7 @@ func main() {
 
 	v1 := router.Group("/api/v1")
 	if cfg.Security.APIKeyEnabled {
-		v1.Use(middleware.JWTAuthMiddleware(jwtSecret))
+		v1.Use(middleware.APIKeyOrJWTAuth(apiKeyRepo, jwtSecret))
 	}
 	{
 		v1.POST("/templates", templateHandler.Create)
@@ -219,6 +219,10 @@ func main() {
 		v1.GET("/print-jobs/:id", printJobHandler.GetByID)
 		v1.PUT("/print-jobs/:id/status", printJobHandler.UpdateStatus)
 		v1.DELETE("/print-jobs/:id", printJobHandler.Delete)
+
+		if wsHandler != nil {
+			v1.GET("/ws", wsHandler.HandleConnection)
+		}
 	}
 
 	if cfg.Dashboard.Enabled {
@@ -278,6 +282,7 @@ func main() {
 	}
 
 	router.Static("/uploads", cfg.Storage.UploadDir)
+	router.Static("/assets", "./public/dist/assets")
 
 	isDev := gin.Mode() == gin.DebugMode
 	if isDev {

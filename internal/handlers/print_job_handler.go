@@ -22,6 +22,7 @@ type PrintJobHandler struct {
 	repo        *repositories.PrintJobRepository
 	printerRepo *repositories.PrinterRepository
 	cupsService *services.CUPSService
+	wsHandler   *WebSocketHandler
 	validate    *validator.Validate
 	logger      *logrus.Logger
 	tmpDir      string
@@ -31,6 +32,7 @@ func NewPrintJobHandler(
 	repo *repositories.PrintJobRepository,
 	printerRepo *repositories.PrinterRepository,
 	cupsService *services.CUPSService,
+	wsHandler *WebSocketHandler,
 	logger *logrus.Logger,
 ) *PrintJobHandler {
 	tmpDir := filepath.Join(os.TempDir(), "imposizcy-print")
@@ -39,6 +41,7 @@ func NewPrintJobHandler(
 		repo:        repo,
 		printerRepo: printerRepo,
 		cupsService: cupsService,
+		wsHandler:   wsHandler,
 		validate:    validator.New(),
 		logger:      logger,
 		tmpDir:      tmpDir,
@@ -75,7 +78,30 @@ func (h *PrintJobHandler) Create(c *gin.Context) {
 		return
 	}
 
-	go h.dispatchToCUPS(pj)
+	// Broadcast print job to connected agents via WebSocket
+	if h.wsHandler != nil {
+		// Look up printer cups_name
+		cupsName := ""
+		printer, err := h.printerRepo.GetByID(c.Request.Context(), pj.PrinterID)
+		if err == nil {
+			cupsName = printer.CupsName
+		}
+
+		msg := map[string]interface{}{
+			"type":         "print_job",
+			"print_job_id": pj.ID.Hex(),
+			"order_id":     pj.OrderID,
+			"printer_id":   pj.PrinterID,
+			"cups_name":    cupsName,
+			"file_url":     pj.FileURL,
+			"copies":       pj.Copies,
+			"paper_size":   pj.PaperSize,
+			"color_mode":   pj.ColorMode,
+			"sides":        pj.Sides,
+		}
+		h.wsHandler.Broadcast(msg)
+		h.logger.WithField("job_id", pj.ID.Hex()).Info("Print job broadcasted to agents")
+	}
 
 	c.JSON(http.StatusCreated, models.SuccessResponse{Success: true, Message: "Print job created", Data: pj})
 }
@@ -113,6 +139,15 @@ func (h *PrintJobHandler) UpdateStatus(c *gin.Context) {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{Success: false, Error: "Print job not found", Code: http.StatusNotFound})
 		return
 	}
+
+	// Fire callback when status is done or failed
+	if status == models.PrintJobStatusDone || status == models.PrintJobStatusFailed {
+		pj, err := h.repo.GetByID(c.Request.Context(), id)
+		if err == nil {
+			go h.fireCallback(pj, string(status))
+		}
+	}
+
 	c.JSON(http.StatusOK, models.SuccessResponse{Success: true, Message: "Status updated"})
 }
 

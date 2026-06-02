@@ -37,6 +37,28 @@ func (r *PrinterRepository) Create(ctx context.Context, p *models.Printer) error
 	return err
 }
 
+func (r *PrinterRepository) Upsert(ctx context.Context, p *models.Printer) error {
+	filter := bson.M{"name": p.Name, "tenant_id": p.TenantID}
+	update := bson.M{
+		"$set": bson.M{
+			"cups_name":   p.CupsName,
+			"location":    p.Location,
+			"paper_sizes": p.PaperSizes,
+			"color_modes": p.ColorModes,
+			"is_active":   true,
+			"updated_at":  time.Now(),
+		},
+		"$setOnInsert": bson.M{
+			"_id":        primitive.NewObjectID(),
+			"status":     models.PrinterStatusIdle,
+			"created_at": time.Now(),
+		},
+	}
+	opts := options.Update().SetUpsert(true)
+	_, err := r.collection().UpdateOne(ctx, filter, update, opts)
+	return err
+}
+
 func (r *PrinterRepository) GetByID(ctx context.Context, id string) (*models.Printer, error) {
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {

@@ -47,13 +47,13 @@ func (h *PrinterHandler) Create(c *gin.Context) {
 		ColorModes: req.ColorModes,
 		IsActive:   req.IsActive,
 	}
-	if err := h.repo.Create(c.Request.Context(), printer); err != nil {
-		h.logger.WithError(err).Error("Failed to create printer")
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Success: false, Error: "Failed to create printer", Code: http.StatusInternalServerError})
+	if err := h.repo.Upsert(c.Request.Context(), printer); err != nil {
+		h.logger.WithError(err).Error("Failed to create/update printer")
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Success: false, Error: "Failed to create/update printer", Code: http.StatusInternalServerError})
 		return
 	}
 
-	c.JSON(http.StatusCreated, models.SuccessResponse{Success: true, Message: "Printer created", Data: printer})
+	c.JSON(http.StatusCreated, models.SuccessResponse{Success: true, Message: "Printer registered", Data: printer})
 }
 
 func (h *PrinterHandler) List(c *gin.Context) {
