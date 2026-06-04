@@ -115,6 +115,29 @@ func (h *SecurityHandler) DeleteAPIKey(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "API key revoked"})
 }
 
+func (h *SecurityHandler) GetOrCreateTenantAPIKey(c *gin.Context) {
+	tenantID := c.Param("tenant_id")
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "tenant_id required"})
+		return
+	}
+
+	apiKey, rawKey, err := h.apiKeyRepo.GetOrCreateForTenant(c.Request.Context(), tenantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"id":     apiKey.ID,
+			"key":    rawKey,
+			"prefix": apiKey.Prefix,
+		},
+	})
+}
+
 func generateAPIKey() string {
 	b := make([]byte, 32)
 	rand.Read(b)

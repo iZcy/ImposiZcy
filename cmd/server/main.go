@@ -220,6 +220,9 @@ func main() {
 		v1.PUT("/print-jobs/:id/status", printJobHandler.UpdateStatus)
 		v1.DELETE("/print-jobs/:id", printJobHandler.Delete)
 
+		// Tenant API key endpoint (for BFF to get tenant-specific keys)
+		v1.GET("/security/api-keys/tenant/:tenant_id", securityHandler.GetOrCreateTenantAPIKey)
+
 		if wsHandler != nil {
 			v1.GET("/ws", wsHandler.HandleConnection)
 		}
@@ -276,6 +279,7 @@ func main() {
 			dashboard.GET("/security/api-keys", securityHandler.ListAPIKeys)
 			dashboard.POST("/security/api-keys", securityHandler.CreateAPIKey)
 			dashboard.DELETE("/security/api-keys/:id", securityHandler.DeleteAPIKey)
+			dashboard.GET("/security/api-keys/tenant/:tenant_id", securityHandler.GetOrCreateTenantAPIKey)
 
 			dashboard.GET("/ws", wsHandler.HandleConnection)
 		}

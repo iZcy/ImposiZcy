@@ -80,6 +80,49 @@ func (r *APIKeyRepository) Revoke(ctx context.Context, id string) error {
 	return err
 }
 
+func (r *APIKeyRepository) GetOrCreateForTenant(ctx context.Context, tenantID string) (*models.APIKey, string, error) {
+	// Try to find existing active key for this tenant
+	var existing models.APIKey
+	err := r.collection().FindOne(ctx, bson.M{"tenant_id": tenantID, "active": true}).Decode(&existing)
+	if err == nil {
+		// Return existing key with raw key if stored
+		return &existing, existing.RawKey, nil
+	}
+
+	// Create new key for tenant
+	rawKey := generateAPIKey()
+	hash := sha256.Sum256([]byte(rawKey))
+	keyHash := hex.EncodeToString(hash[:])
+	prefix := rawKey[:8]
+
+	apiKey := &models.APIKey{
+		Name:      "tenant-" + tenantID,
+		TenantID:  tenantID,
+		KeyHash:   keyHash,
+		RawKey:    rawKey, // Store raw key for retrieval
+		Prefix:    prefix,
+		Active:    true,
+		CreatedBy: "system",
+		CreatedAt: time.Now(),
+	}
+
+	_, err = r.collection().InsertOne(ctx, apiKey)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return apiKey, rawKey, nil
+}
+
+func (r *APIKeyRepository) GetByTenantID(ctx context.Context, tenantID string) (*models.APIKey, error) {
+	var apiKey models.APIKey
+	err := r.collection().FindOne(ctx, bson.M{"tenant_id": tenantID, "active": true}).Decode(&apiKey)
+	if err != nil {
+		return nil, err
+	}
+	return &apiKey, nil
+}
+
 func generateAPIKey() string {
 	b := make([]byte, 32)
 	rand.Read(b)
